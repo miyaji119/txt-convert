@@ -1,2 +1,151 @@
-# txt-convert
-optimize txt file and convert it to epub
+# TXT 优化器与 EPUB 转换器
+
+模块化 Python 脚本，用于优化 TXT 小说文件并转换为 EPUB 格式。
+
+## 功能特性
+
+### TXT 文件优化
+- 自动检测文件编码（支持 UTF-8、GBK、GB2312 等）
+- 标准化章节标题格式
+- 智能段落合并与分隔
+- 支持多种章节格式识别
+
+### EPUB 生成
+- 自动解析章节标题
+- 提取小说标题和作者信息
+- 支持自定义封面图片
+- 自动搜索网络封面（晋江、长佩、起点等平台）
+- 保留文案/简介内容在第一章前
+
+### 章节识别支持
+| 格式 | 示例 |
+|------|------|
+| 标准格式 | `第1章 标题` / `第一章 标题` |
+| 等号分隔 | `==第1章 标题==` |
+| 数字序号 | `1、第一章 标题` |
+| 特殊章节 | `楔子` / `番外` |
+
+## 项目结构
+
+```
+novel-transfer/
+├── txt_optimizer.py   # 主入口
+├── encoding.py        # 编码检测
+├── chapter.py         # 章节分析
+├── display.py         # 目录显示
+├── cover.py           # 封面下载
+├── easypub.py         # EasyPub优化
+└── epub.py            # EPUB生成
+```
+
+## 安装依赖
+
+```bash
+pip3 install ebooklib pillow requests
+```
+
+## 使用方法
+
+### 命令行模式
+
+#### 1. 优化 TXT 文件（生成 *epub_ready.txt）
+```bash
+python3 txt_optimizer.py --convert ~/Downloads/novel.txt
+```
+
+#### 2. 生成 EPUB 文件
+```bash
+python3 txt_optimizer.py --epub ~/Downloads/novel_epub_ready.txt
+```
+
+#### 3. 指定书名和作者
+```bash
+python3 txt_optimizer.py --epub novel.txt --title "书名" --author "作者"
+```
+
+#### 4. 指定封面图片
+```bash
+python3 txt_optimizer.py --epub novel.txt --cover ~/Downloads/cover.jpg
+```
+
+#### 5. 自动搜索封面（推荐）
+```bash
+python3 txt_optimizer.py --epub novel.txt --auto-cover
+```
+
+#### 6. 查看章节目录
+```bash
+python3 txt_optimizer.py --catalog ~/Downloads/novel.txt
+```
+
+#### 7. 查看目录结构
+```bash
+python3 txt_optimizer.py --tree ~/Downloads/
+```
+
+#### 8. 批量转换文件夹
+```bash
+python3 txt_optimizer.py --batch ~/Downloads/novels/
+```
+
+#### 9. 显示帮助
+```bash
+python3 txt_optimizer.py --guide
+```
+
+## 命令行参数
+
+| 参数 | 说明 |
+|------|------|
+| `--convert <文件>` | 转换单个文件为EasyPub友好格式 |
+| `--batch <文件夹>` | 批量转换文件夹内的所有txt文件 |
+| `--epub <文件>` | 将优化后的TXT文件转换为EPUB |
+| `--tree <路径>` | 显示文件或目录结构 |
+| `--catalog <文件>` | 显示TXT文件的章节目录 |
+| `--guide` | 显示使用指南 |
+| `--author <作者>` | 指定作者名 |
+| `--title <书名>` | 指定书名 |
+| `--cover <图片>` | 指定封面图片路径 |
+| `--auto-cover` | 自动搜索封面 |
+
+## 工作流程
+
+```
+原始TXT文件
+    │
+    ▼
+┌─────────────────┐
+│  --convert      │  标准化章节格式
+│  生成*_epub_ready.txt │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│  --epub         │  生成EPUB
+│  (可选封面搜索)  │
+└─────────────────┘
+    │
+    ▼
+   EPUB文件
+```
+
+## 输出文件
+
+- 优化后的 TXT：`{书名}_epub_ready.txt`
+- 章节分析：`{书名}_analysis.json`
+- 生成的 EPUB：`{书名}.epub`
+- 批量报告：`batch_report.md`
+
+## 支持的平台
+
+- macOS ✓
+- Windows ✓
+- Linux ✓
+
+## 封面搜索来源
+
+1. 晋江文学城 (jjwxc.net)
+2. 长佩文学 (gongzicp.com)
+3. 起点中文网 (qidian.com)
+4. Open Library
+5. Bing 图片搜索
