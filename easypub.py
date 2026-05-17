@@ -8,6 +8,7 @@ from typing import Optional, Dict, List, Tuple
 
 from encoding import EncodingDetector
 from display import DirectoryDisplay
+from chapter import ChapterAnalyzer
 
 
 class EasyPubOptimizer:
@@ -50,12 +51,31 @@ class EasyPubOptimizer:
             return None
 
     @staticmethod
-    def optimize_for_epub(text: str, book_title: str = "", author: str = "") -> Tuple[str, Dict]:
+    def optimize_for_epub(text: str, book_title: str = "", author: str = "", chapter_info: Dict = None) -> Tuple[str, Dict]:
+        """优化文本为EasyPub格式
+        
+        Args:
+            text: 原始文本内容
+            book_title: 书名
+            author: 作者
+            chapter_info: 章节信息（来自ChapterAnalyzer），用于过滤误识别的章节
+        
+        Returns:
+            (优化后的文本, 分析结果)
+        """
         lines = text.split('\n')
         optimized_lines = []
         chapters = []
         current_chapter = 0
         in_paragraph = False
+        
+        # 获取有效的章节信息（用于过滤误识别的章节）
+        valid_chapters_map = {}
+        if chapter_info and 'chapters' in chapter_info:
+            for ch in chapter_info['chapters']:
+                if ch['number'] not in valid_chapters_map:
+                    valid_chapters_map[ch['number']] = ch
+            print(f"   ⚠️ 使用ChapterAnalyzer章节信息过滤，有效章节: {len(valid_chapters_map)}个")
 
         for i, line in enumerate(lines):
             line = line.strip()
@@ -69,11 +89,26 @@ class EasyPubOptimizer:
             for pattern, replacement in EasyPubOptimizer.EASYPUB_CHAPTER_PATTERNS:
                 match = re.match(pattern, line)
                 if match:
+                    chapter_num = match.group(1)
+                    chapter_num_int = int(chapter_num) if chapter_num.isdigit() else (EasyPubOptimizer.chinese_to_arabic(chapter_num) or current_chapter + 1)
+                    chapter_title = match.group(2).strip() if len(match.groups()) > 1 else ""
+                    
+                    # 如果有章节信息，检查这个章节号和标题是否匹配
+                    if valid_chapters_map:
+                        if chapter_num_int not in valid_chapters_map:
+                            # 章节号不在有效列表中，跳过
+                            continue
+                        
+                        valid_ch = valid_chapters_map[chapter_num_int]
+                        valid_title = valid_ch.get('title', '')
+                        if chapter_title and valid_title:
+                            if chapter_title not in valid_title and valid_title not in chapter_title:
+                                # 标题不匹配，跳过
+                                continue
+                    
+                    # 所有检查通过，标记为章节
                     is_chapter = True
                     current_chapter += 1
-                    chapter_num = match.group(1)
-                    chapter_num_int = int(chapter_num) if chapter_num.isdigit() else (EasyPubOptimizer.chinese_to_arabic(chapter_num) or current_chapter)
-                    chapter_title = match.group(2).strip() if len(match.groups()) > 1 else ""
                     standard_line = f"第{chapter_num_int}章 {chapter_title}" if chapter_title else f"第{chapter_num_int}章"
                     chapters.append({
                         'original_line': i + 1, 'number': chapter_num_int,
@@ -95,7 +130,11 @@ class EasyPubOptimizer:
 
         optimized_text = '\n'.join(optimized_lines)
         optimized_text = re.sub(r'\n{3,}', '\n\n', optimized_text)
-        return optimized_text, {'total_chapters': len(chapters), 'chapters': chapters, 'total_lines': len(optimized_lines), 'total_chars': len(optimized_text)}
+        
+        # 如果有章节信息，使用准确的章节数
+        total_chapters = len(valid_chapters_map) if valid_chapters_map else len(chapters)
+        
+        return optimized_text, {'total_chapters': total_chapters, 'chapters': chapters, 'total_lines': len(optimized_lines), 'total_chars': len(optimized_text)}
 
 
 def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True) -> Tuple[Optional[str], Optional[Dict]]:
@@ -113,10 +152,13 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
         print(f"   ❌ 无法读取文件: {e}")
         return None, None
 
-    original_chapters = len(re.findall(r'第[零一二三四五六七八九十百千万\d]+章', content))
-    print(f"   原始章节: {original_chapters}个")
+    # 使用ChapterAnalyzer获取准确的章节信息
+    chapter_structure = ChapterAnalyzer.analyze_chapter_structure(content, config_name='default')
+    accurate_chapters = chapter_structure['total_chapters']
+    print(f"   原始章节: {accurate_chapters}个")
 
-    optimized_content, analysis = EasyPubOptimizer.optimize_for_epub(content, book_title, author)
+    # 传递章节信息给optimize_for_epub，让它过滤误识别的章节
+    optimized_content, analysis = EasyPubOptimizer.optimize_for_epub(content, book_title, author, chapter_structure)
 
     try:
         with open(output_file, 'w', encoding='utf-8') as f:

@@ -64,7 +64,6 @@ DEFAULT_CHAPTER_PATTERNS = [
     # (正则表达式, 模式名称)
     (r'^[=]+第\s*(\d+)\s*章\s*(.*?)[=]*$', 'equals'),           # =====第X章=====
     (r'^第\s*([零一二三四五六七八九十百千万\d]+)\s*章\s*(.*)$', 'chinese'),    # 第X章 标题
-    (r'^(攻)?第\s*([零一二三四五六七八九十百千万\d]+)\s*章\s*(.*)$', 'prefix'),  # 攻第X章 标题
     (r'^\d+、第([零一二三四五六七八九十百千万\d]+)章\s*(.*)$', 'number_chinese'), # 1、第X章 标题
     (r'^\d+、番外(.*)$', 'number_fanwai'),                    # 1、番外标题
     (r'^番外([零一二三四五六七八九十百千万\d]+)(.*)$', 'fanwai'),            # 番外X标题
@@ -150,6 +149,57 @@ def filter_repeat_chapter(chapter_num: int = None, seen_chapter_nums: set = None
         return False
     return chapter_num in seen_chapter_nums
 
+def filter_zero_chapter(chapter_match=None, ptype: str = None, **kwargs) -> bool:
+    """过滤第0章（通常不是有效章节）"""
+    if not chapter_match:
+        return False
+    try:
+        if ptype == 'simple_number':
+            chapter_num = int(chapter_match.group(1))
+            if chapter_num == 0:
+                # 检查标题是否包含多个数字用顿号分隔的模式（如01、36、35）
+                title_part = chapter_match.group(2).strip() if chapter_match.lastindex >= 2 else ''
+                if '、' in title_part:
+                    parts = title_part.split('、')
+                    # 如果有多个数字用顿号分隔，很可能是游戏数据或其他内容
+                    if len(parts) >= 3 and all(p.isdigit() or (p.endswith('。') and p[:-1].isdigit()) for p in parts):
+                        return True
+            return chapter_num == 0
+    except:
+        return False
+    return False
+
+def filter_description_lines(chapter_match=None, ptype: str = None, **kwargs) -> bool:
+    """过滤文案描述行（如1、1v1，xxx；2、攻xxx等格式）"""
+    if not chapter_match or ptype != 'simple_number':
+        return False
+    try:
+        title_part = chapter_match.group(2).strip() if chapter_match.lastindex >= 2 else ''
+        
+        # 如果标题部分以'第'开头，说明这是真正的章节标题，让其他模式处理（不过滤）
+        if title_part.startswith('第'):
+            return False
+        
+        # 检查是否是文案描述格式
+        description_patterns = [
+            # 常见的文案标签
+            '1v1', 'he', 'be', 'np',
+            # 攻受描述
+            '攻', '受', '攻受', '主角', '主角攻', '主角受',
+            # 情节警告
+            '慎入', '避雷', '注意', '警告',
+            # 标签格式
+            '标签：', '文案：', '简介：',
+            # CP描述
+            'x', '×', '×', '和', '与', '攻x受', '受x攻',
+        ]
+        # 如果标题包含这些关键词且长度较短，很可能是文案描述
+        if len(title_part) < 100 and any(pattern in title_part for pattern in description_patterns):
+            return True
+        return False
+    except:
+        return False
+
 # 默认过滤规则
 DEFAULT_FILTER_RULES = [
     {'name': 'percent', 'func': filter_percent, 'description': '过滤百分比格式'},
@@ -159,6 +209,8 @@ DEFAULT_FILTER_RULES = [
     {'name': 'content_fragment', 'func': filter_content_fragment, 'description': '过滤内容片段'},
     {'name': 'countdown', 'func': filter_countdown, 'description': '过滤倒计时格式'},
     {'name': 'repeat_chapter', 'func': filter_repeat_chapter, 'description': '过滤重复章节'},
+    {'name': 'zero_chapter', 'func': filter_zero_chapter, 'description': '过滤第0章'},
+    {'name': 'description_lines', 'func': filter_description_lines, 'description': '过滤文案描述行'},
 ]
 
 # BL小说特有过滤规则

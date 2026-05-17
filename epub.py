@@ -268,6 +268,12 @@ class EPUBGenerator:
                                 print(f"[DEBUG] 章节识别 - 跳过倒计时格式: 行{idx+1}, 文本: {repr(stripped)}")
                                 chapter_num = None
                                 continue
+                        # 检查是否可能是文案描述行（如1、1v1，xxx；2、攻xxx等格式）
+                        description_patterns = ['1v1', 'he', 'be', 'np', '攻', '受', '攻受', '主角', '慎入', '避雷', '注意', '警告', '标签：', '文案：', '简介：', 'x', '×']
+                        if len(title_part) < 100 and any(pattern in title_part for pattern in description_patterns):
+                            print(f"[DEBUG] 章节识别 - 跳过文案描述行: 行{idx+1}, 文本: {repr(stripped)}")
+                            chapter_num = None
+                            continue
                         chapter_title = f"第{chapter_num}章 {title_part}" if title_part else f"第{chapter_num}章"
                     elif ptype == 'number_fanwai':
                         chapter_num = 999
