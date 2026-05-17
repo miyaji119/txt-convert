@@ -117,9 +117,32 @@ def main():
         print("\n📄 原文件信息:")
         print(DirectoryDisplay.display_file_tree(filepath))
 
-        default_title = os.path.splitext(os.path.basename(filepath))[0]
-        book_title = args.title or input(f"\n请输入书名 (默认: {default_title}): ").strip() or default_title
-        author = args.author or input("请输入作者 (默认: 未知): ").strip() or "未知"
+        book_title = ""
+        author = ""
+
+        if not args.title or not args.author:
+            try:
+                from encoding import EncodingDetector
+                content, _ = EncodingDetector.read_file_with_auto_encoding(filepath)
+                
+                if not args.title:
+                    book_title = EPUBGenerator._extract_title(content)
+                    if book_title:
+                        print(f"   从内容中提取书名: {book_title}")
+                
+                if not args.author:
+                    author = EPUBGenerator._extract_author(content)
+                    if author:
+                        print(f"   从内容中提取作者: {author}")
+            except Exception as e:
+                print(f"   ⚠️ 自动提取元数据失败: {e}")
+
+        if not book_title:
+            default_title = os.path.splitext(os.path.basename(filepath))[0]
+            book_title = args.title or input(f"\n请输入书名 (默认: {default_title}): ").strip() or default_title
+        
+        if not author:
+            author = args.author or input("请输入作者 (默认: 未知): ").strip() or "未知"
 
         output_file, analysis = convert_for_easypub(filepath, None, book_title, author, show_catalog=True)
         if output_file:
@@ -171,9 +194,8 @@ def main():
         print("\n📄 源文件信息:")
         print(DirectoryDisplay.display_file_tree(args.epub))
 
-        default_title = os.path.splitext(os.path.basename(args.epub))[0].replace('_epub_ready', '')
-        book_title = args.title or input(f"\n请输入书名 (默认: {default_title}): ").strip() or default_title
-        author = args.author or input("请输入作者 (默认: 未知): ").strip() or "未知"
+        book_title = args.title if args.title else ""
+        author = args.author if args.author else ""
 
         cover_image = args.cover
         auto_search = args.auto_cover

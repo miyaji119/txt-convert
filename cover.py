@@ -26,13 +26,23 @@ class CoverDownloader:
         """下载图片到本地"""
         try:
             import urllib.request
+            print(f"[DEBUG] 封面下载 - 尝试下载图片: {url}")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             req = urllib.request.Request(url, headers=headers)
             ssl_ctx = CoverDownloader._create_ssl_context()
             with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) if ssl_ctx else urllib.request.urlopen(req, timeout=15) as response:
                 image_data = response.read()
-            return len(image_data) >= 5000 and open(local_path, 'wb').write(image_data)
-        except:
+                print(f"[DEBUG] 封面下载 - 下载完成，大小: {len(image_data)} 字节")
+            if len(image_data) >= 5000:
+                with open(local_path, 'wb') as f:
+                    f.write(image_data)
+                print(f"[DEBUG] 封面下载 - 保存成功: {local_path}")
+                return True
+            else:
+                print(f"[DEBUG] 封面下载 - 文件太小，跳过")
+                return False
+        except Exception as e:
+            print(f"[DEBUG] 封面下载 - 下载失败: {e}")
             return False
 
     @staticmethod
@@ -146,20 +156,23 @@ class CoverDownloader:
         if output_dir is None:
             output_dir = os.path.dirname(os.path.abspath(__file__))
         print(f"🔍 正在搜索封面: {book_title} {'by ' + author if author else ''}")
+        print(f"[DEBUG] 封面搜索 - 输出目录: {output_dir}")
 
         search_methods = [
-            lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "jjwxc.net", output_dir),
-            lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "gongzicp.com", output_dir),
-            lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "qidian.com", output_dir),
-            lambda: CoverDownloader._search_via_bing_images(book_title, author, output_dir),
-            lambda: CoverDownloader._search_via_openlibrary(book_title, author, output_dir),
+            ("晋江文学城", lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "jjwxc.net", output_dir)),
+            ("长佩文学", lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "gongzicp.com", output_dir)),
+            ("起点中文网", lambda: CoverDownloader._search_via_google(f"{book_title} {author}", "qidian.com", output_dir)),
+            ("Bing图片", lambda: CoverDownloader._search_via_bing_images(book_title, author, output_dir)),
+            ("Open Library", lambda: CoverDownloader._search_via_openlibrary(book_title, author, output_dir)),
         ]
 
-        for method in search_methods:
+        for source_name, method in search_methods:
+            print(f"[DEBUG] 封面搜索 - 尝试 {source_name}")
             cover_path = method()
             if cover_path:
                 print(f"✅ 封面下载成功: {cover_path}")
                 return cover_path
+            print(f"[DEBUG] 封面搜索 - {source_name} 未找到")
 
         print("⚠️ 未能找到封面图片")
         return None
@@ -168,9 +181,12 @@ class CoverDownloader:
     def download_cover_from_url(url: str, output_dir: str = None) -> Optional[str]:
         """从URL下载封面图片"""
         if not url:
+            print("[DEBUG] 封面下载 - URL为空")
             return None
         if output_dir is None:
             output_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[DEBUG] 封面下载 - 从URL下载: {url}")
+        print(f"[DEBUG] 封面下载 - 输出目录: {output_dir}")
         try:
             import ssl
             import gzip
@@ -181,15 +197,20 @@ class CoverDownloader:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, context=context, timeout=30) as response:
                 raw_data = response.read()
+                print(f"[DEBUG] 封面下载 - 原始数据大小: {len(raw_data)} 字节")
             try:
                 image_data = gzip.decompress(raw_data)
+                print(f"[DEBUG] 封面下载 - 解压后大小: {len(image_data)} 字节")
             except:
                 image_data = raw_data
+                print(f"[DEBUG] 封面下载 - 无需解压")
             cover_path = os.path.join(output_dir, 'cover.jpg')
             with open(cover_path, 'wb') as f:
                 f.write(image_data)
+            print(f"[DEBUG] 封面下载 - 保存到: {cover_path}")
             print(f"✅ 封面下载成功: {cover_path}")
             return cover_path
         except Exception as e:
+            print(f"[DEBUG] 封面下载失败: {e}")
             print(f"⚠️ 封面下载失败: {e}")
             return None
