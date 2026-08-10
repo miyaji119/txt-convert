@@ -32,17 +32,35 @@
 ## 项目结构
 
 ```
-novel-transfer/
+txt-convert/
 ├── txt_optimizer.py                  # CLI 主入口
-├── gui.py                            # GUI 主入口 ⭐ NEW
+├── gui.py                            # GUI 兼容入口（→ gui/ 包）
+├── config.py                         # 配置持久化 ⭐ NEW
 ├── encoding.py                       # 编码检测
 ├── chapter.py                        # 章节分析
 ├── chapter_config.py                 # 章节识别配置
+├── chapter_numberer.py               # 章节编号
+├── clean_rules.py                    # 清洗规则
 ├── display.py                        # 目录显示
-├── cover.py                          # 封面下载
-├── easypub.py                        # EasyPub优化
-├── epub.py                           # EPUB生成
-└── clean_duplicate_chapter_titles.py # 重复章节标题清理
+├── cover.py                          # 封面下载（多候选架构）⭐ REWRITE
+├── cover_picker_dialog.py            # 封面候选选择对话框 ⭐ NEW
+├── easypub.py                        # EasyPub 优化
+├── epub.py                           # EPUB 生成
+├── txt_optimizer.py                  # TXT 优化器
+├── gui/                              # GUI 包 ⭐ NEW（原 gui.py 拆分）
+│   ├── __init__.py                   # 包入口
+│   ├── app.py                        # 主窗口 TxtToEpubGUI
+│   ├── constants.py                  # 全局常量
+│   ├── theme.py                      # 主题样式（sv-ttk + 回退）
+│   ├── log_panel.py                  # 日志重定向
+│   ├── task_runner.py                # 任务执行器（partial 机制）
+│   ├── settings_dialog.py            # 设置对话框
+│   └── tabs/                         # 标签页子包
+│       ├── base_tab.py               # Tab 基类
+│       ├── convert_tab.py            # 单文件转换
+│       ├── batch_tab.py              # 批量转换
+│       ├── epub_tab.py               # EPUB 生成
+│       └── catalog_tab.py            # 章节目录编辑
 ```
 
 ## 安装依赖
@@ -51,9 +69,12 @@ novel-transfer/
 # 基础依赖（GUI + TXT 转换）
 # tkinter 已内置于 Python 标准库，无需安装
 
-# 可选依赖（EPUB 生成 + 封面下载）
-pip3 install ebooklib pillow requests
+# 可选依赖（EPUB 生成 + 封面下载 + 主题美化）
+pip3 install ebooklib pillow requests sv-ttk
 ```
+
+> **注**：sv-ttk 需要 Tk 8.6+，旧版本会自动回退到手写样式。  
+> macOS 升级 Tk：`brew install python-tk`
 
 ## 快速开始
 
@@ -67,7 +88,7 @@ python3 gui.py
 
 ```
 ┌──────────────────────────────────────────────────┐
-│  TXT 转 EPUB 工具 v1.4                    [状态]  │
+│  TXT 转 EPUB 工具 v2.0                    [状态]  │
 ├──────────────────────────────────────────────────┤
 │ [单文件转换] [批量转换] [EPUB生成] [章节目录]      │
 ├──────────────────────────────────────────────────┤
@@ -128,7 +149,14 @@ python3 txt_optimizer.py --convert ~/Downloads/novel.txt
 - 不使用封面
 - 本地图片路径（支持 jpg/png/gif/webp）
 - 图片 URL（在线图片地址）
-- 自动从网上搜索（推荐，支持晋江、长佩、起点等平台）
+- 自动搜索（推荐）：搜索后弹出候选选择对话框，用户从缩略图网格中点选封面
+
+**封面候选选择**（自动搜索时）：
+- 搜索多个来源，返回最多 9 个候选
+- 网格展示缩略图（120×170），标注来源和置信度
+- 置信度标签：≥80% 绿色 / ≥50% 橙色 / 其他灰色
+- 点击选中后下载高清版继续生成流程
+- 无 PIL 时降级为文字卡片，仍可选择
 
 ### 4. 章节目录标签页
 
@@ -147,12 +175,17 @@ python3 txt_optimizer.py --convert ~/Downloads/novel.txt
 ### GUI 特性
 
 - **后台线程执行**：所有耗时操作在后台线程运行，界面不冻结
+- **TaskRunner 机制**：用 `functools.partial` 冻结参数，机制性杜绝闭包陷阱
 - **实时日志输出**：彩色显示不同级别日志（INFO/WARN/ERROR/DEBUG）
 - **进度条**：可视化任务执行进度
 - **任务取消**：可随时取消运行中的任务
 - **快速打开输出目录**：一键打开生成的文件所在目录
 - **菜单快捷操作**：通过菜单栏快速打开文件/文件夹
 - **章节目录编辑**：支持编辑章节号、标题，上移/下移/删除章节，保存修改到文件
+- **封面候选选择**：自动搜索后弹出缩略图网格，用户点选封面
+- **配置持久化**：窗口位置、上次 Tab、封面选项、最近路径自动保存
+- **设置对话框**：菜单 `文件 → 设置...` 管理默认输出目录和自定义正则规则
+- **sv-ttk 主题**：Sun Valley 现代化外观（需 Tk 8.6+，旧版本自动回退）
 
 ## 使用方法
 
@@ -269,13 +302,53 @@ python3 txt_optimizer.py --guide
 
 ## 封面搜索来源
 
-1. 晋江文学城 (jjwxc.net)
-2. 长佩文学 (gongzicp.com)
-3. 起点中文网 (qidian.com)
-4. Open Library
-5. Bing 图片搜索
+| 来源 | 方式 | 状态 | 说明 |
+|------|------|------|------|
+| 晋江文学城 | `search_ajax.php` JSON API → 详情页 | ✅ 可用 | 中文网络小说高质量来源 |
+| 豆瓣读书 | `j/subject_suggest` JSON 接口 | ✅ 可用 | 小图自动转大图 |
+| 长佩文学 | SPA 页面解析 | ⚠️ 骨架 | 反爬严格，未来扩展 |
+| Bing 图片 | `mediaurl=` 正则提取 | ⚠️ 兜底 | 相关性较低，作为备选 |
+
+搜索结果按置信度排序（完全匹配 1.0 / 包含 0.85 / 作者匹配 +0.1），
+封面形状过滤（宽高比 0.5-0.95、最小 200×280），支持本地缓存。
 
 ## 修改记录
+
+### v2.0 (2026-08-10)
+
+**架构重构与功能增强**，详细变更见 [CHANGELOG_v2.0.md](CHANGELOG_v2.0.md)。
+
+#### 阶段 1：封面下载重构
+- 重写 `cover.py`（217→792 行），多候选架构 + 置信度排序
+- 新增晋江文学城、豆瓣读书搜索源（JSON API）
+- 新增 `cover_picker_dialog.py`：封面候选选择对话框（缩略图网格）
+- 封面形状过滤（宽高比 0.5-0.95、最小 200×280）+ 本地缓存
+- 移除失效的 Google 图片搜索和 OpenLibrary
+
+#### 阶段 2：GUI 拆分为包
+- `gui.py`（2069 行单文件）拆分为 11 个文件的 `gui/` 包
+- 新增 `gui/__init__.py`、`app.py`、`constants.py`、`theme.py`、`log_panel.py`
+- 新增 `gui/tabs/` 子包：`base_tab.py` + 4 个 Tab 模块
+- 保留 `gui.py` 作为兼容入口（27 行）
+
+#### 阶段 3：TaskRunner 重构
+- 新增 `gui/task_runner.py`：用 `functools.partial` 机制性杜绝闭包陷阱
+- 三层 partial 冻结：submit 时冻结参数、成功结果立即绑定、except 块异常对象立即绑定
+- 用 `ThreadPoolExecutor(max_workers=1)` 替换手动 `threading.Thread`
+- 解决原 `lambda: on_error(e)` 导致的 `NameError` 问题
+
+#### 阶段 4：配置持久化
+- 新增 `config.py`：`~/.txt2epub/config.json` 配置管理
+- 新增 `gui/settings_dialog.py`：设置对话框（默认输出目录 + 自定义正则规则）
+- 持久化：窗口位置、上次 Tab、封面选项、最近路径（5 个）、正则规则
+- 各 Tab 集成 config：文件选择时记录最近路径
+
+#### 阶段 5：sv-ttk 主题迁移
+- 新增 sv-ttk 依赖，Sun Valley 现代化外观
+- `theme.py` 重写：sv-ttk 优先 + clam 回退 + 手写样式三级适配
+- `Primary.TButton` → `Accent.TButton`（sv-ttk 原生样式名）
+- 日志区颜色改用 COLORS 字典统一管理
+- Tk 8.6+ 自动启用 Sun Valley，旧版本自动回退
 
 ### v1.7 (2026-08-09)
 - 修复 GUI 章节号无法编辑的问题（移除 `state='readonly'`）
