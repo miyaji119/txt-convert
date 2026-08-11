@@ -1,5 +1,6 @@
 """EPUB生成模块"""
 
+import html
 import os
 import re
 from datetime import datetime
@@ -144,10 +145,7 @@ class EPUBGenerator:
         for line in content.split('\n'):
             line = line.strip()
             if line:
-                for old, new in [('&', '&amp;'), ('<', '&lt;'), ('>', '&gt;'),
-                                 ('"', '&quot;'), ("'", '&#39;')]:
-                    line = line.replace(old, new)
-                current.append(line)
+                current.append(html.escape(line, quote=True))
             else:
                 if current:
                     paragraphs.append(f'<p>{" ".join(current)}</p>')

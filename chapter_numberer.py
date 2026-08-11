@@ -57,6 +57,8 @@ OLD_PREFIX_RE = re.compile(
     r')\s*'
 )
 
+_NUMBERED_CHAPTER_RE = re.compile(r'^第\d+章')
+
 
 def is_chapter_title(line: str,
                      patterns: List[Pattern] = None,
@@ -187,14 +189,14 @@ def main():
     numbered = add_chapter_numbers(lines, start=args.start)
 
     # 统计
-    count = sum(1 for l in numbered if re.match(r'^第\d+章', l.strip()))
+    count = sum(1 for l in numbered if _NUMBERED_CHAPTER_RE.match(l.strip()))
 
     if args.preview:
         print(f'📖 {input_path.name} (编码: {enc})')
         print(f'📚 检测到 {count} 个章节标题:\n')
         for line in numbered:
             s = line.strip()
-            if re.match(r'^第\d+章', s):
+            if _NUMBERED_CHAPTER_RE.match(s):
                 print(f'  {s}')
         return
 

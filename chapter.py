@@ -1,5 +1,6 @@
 """章节分析模块"""
 
+import bisect
 import re
 from typing import Dict
 
@@ -116,12 +117,21 @@ class ChapterAnalyzer:
         """分析章节结构"""
         config = ChapterConfig(config_name)
         chapter_patterns = config.CHAPTER_PATTERNS
-        next_chapter_patterns = config.NEXT_CHAPTER_PATTERNS
         filter_rules = config.FILTER_RULES
+
+        # 预编译 next_chapter_patterns 避免循环内重复编译
+        next_chapter_compiled = [re.compile(p) for p in config.NEXT_CHAPTER_PATTERNS]
 
         lines = content.split('\n')
         chapters = []
         seen_chapter_nums = set()
+
+        # 第一遍：找出所有章节起始行索引，用于 bisect 查找下一章节
+        chapter_start_indices = []
+        for i, line in enumerate(lines):
+            s = line.strip()
+            if any(ncp.match(s) for ncp in next_chapter_compiled):
+                chapter_start_indices.append(i)
 
         for i, line in enumerate(lines):
             line_stripped = line.strip()
@@ -145,13 +155,11 @@ class ChapterAnalyzer:
 
                 seen_chapter_nums.add(chapter_num)
 
-                # 查找章节结束行
-                end_line = len(lines) - 1
-                for j in range(i + 1, len(lines)):
-                    next_line = lines[j].strip()
-                    if any(re.match(ncp, next_line) for ncp in next_chapter_patterns):
-                        end_line = j - 1
-                        break
+                # O(log n) 查找下一章节起始行
+                pos = bisect.bisect_right(chapter_start_indices, i)
+                end_line = (chapter_start_indices[pos] - 1
+                            if pos < len(chapter_start_indices)
+                            else len(lines) - 1)
 
                 char_count = sum(len(lines[k].strip())
                                  for k in range(i, min(end_line + 1, len(lines))))

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import argparse
+from collections import deque
 from pathlib import Path
 
 from encoding import EncodingDetector
@@ -35,6 +36,10 @@ from clean_rules import (
     GUOSHI_NUM, GUOSHI_TEXT, ZHIMA_LABEL,
 )
 from chapter_numberer import add_chapter_numbers
+
+# 模块级预编译，避免循环内重复编译
+_CHAPTER_DISPLAY_RE = re.compile(r'^第\d+章')
+_DEDUP_MARKERS_TUPLE = tuple(DEDUP_MARKERS)
 
 
 # ==================== 辅助函数 ====================
@@ -146,7 +151,7 @@ def split_quote_and_body(stripped: str) -> list:
 def dedup_lines(lines: list) -> list:
     """去重：检测到 HTML 注释 / EasyPub 元数据标记时截断后续内容"""
     for i, line in enumerate(lines):
-        if any(marker in line for marker in DEDUP_MARKERS):
+        if any(marker in line for marker in _DEDUP_MARKERS_TUPLE):
             return lines[:i]
     return lines
 
@@ -188,7 +193,7 @@ def clean_novel_content(text: str) -> str:
             continue
 
         # 元数据 / END 标记行跳过
-        if any(stripped.startswith(prefix) for prefix in METADATA_PREFIXES):
+        if stripped.startswith(tuple(METADATA_PREFIXES)):
             continue
         if stripped in END_MARKERS:
             continue
@@ -350,10 +355,12 @@ def clean_novel_content(text: str) -> str:
             result_lines.append(line)
 
     # 移除首尾空行
-    while result_lines and not result_lines[0]:
-        result_lines.pop(0)
-    while result_lines and not result_lines[-1]:
-        result_lines.pop()
+    dq = deque(result_lines)
+    while dq and not dq[0]:
+        dq.popleft()
+    while dq and not dq[-1]:
+        dq.pop()
+    result_lines = list(dq)
 
     # 为章节标题添加连续编号
     result_lines = add_chapter_numbers(result_lines)
@@ -471,7 +478,7 @@ def main():
     print("\n📚 章节目录:")
     for line in optimized.splitlines():
         s = line.strip()
-        if re.match(r'^第\d+章', s):
+        if _CHAPTER_DISPLAY_RE.match(s):
             print(f"   {s}")
 
 

@@ -101,7 +101,8 @@ class ConvertTab(BaseTab):
         title = self.title_var.get().strip()
         author = self.author_var.get().strip()
 
-        self.convert_btn.config(state='disabled')
+        _IDLE = "▶ 开始转换"
+        self.app.set_btn_working(self.convert_btn, True, _IDLE, "⏳ 转换中…")
         self.app.set_status("正在转换...")
 
         def _task():
@@ -120,10 +121,15 @@ class ConvertTab(BaseTab):
                 if analysis:
                     print(f"   章节数: {analysis.get('total_chapters', 0)}")
                     print(f"   字数: {analysis.get('total_chars', 0):,}")
+                self.app.flash_btn_done(self.convert_btn, _IDLE, success=True)
+                self.app.set_nav_badge(0, '✓', '#86efac')
                 messagebox.showinfo("成功", f"转换完成！\n输出文件:\n{output_file}")
-            self.convert_btn.config(state='normal')
+            else:
+                self.app.flash_btn_done(self.convert_btn, _IDLE, success=False)
+                self.app.set_nav_badge(0, '✗', '#fca5a5')
 
         def _on_error(e):
-            self.convert_btn.config(state='normal')
+            self.app.flash_btn_done(self.convert_btn, _IDLE, success=False)
+            self.app.set_nav_badge(0, '✗', '#fca5a5')
 
         self.app.run_task(_task, on_complete=_on_complete, on_error=_on_error)

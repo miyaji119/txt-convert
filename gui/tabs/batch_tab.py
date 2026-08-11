@@ -77,17 +77,18 @@ class BatchTab(BaseTab):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        self.batch_btn.config(state='disabled')
+        _IDLE = "▶ 开始批量转换"
+        self.app.set_btn_working(self.batch_btn, True, _IDLE, "⏳ 批量处理中…")
         self.app.set_status("批量处理中...")
 
         def _task():
-            # 简化调用：使用底层 batch_convert_for_easypub
             results = batch_convert_for_easypub(
                 dir_path, None, None, show_summary=True
             )
             return results
 
         def _on_complete(results):
+            success_count = 0
             if results:
                 for r in results:
                     filename = r.get('filename', '')
@@ -95,18 +96,22 @@ class BatchTab(BaseTab):
                         self.tree.insert('', 'end', values=(filename, "失败", "-", "-"),
                                          tags=('error',))
                     else:
+                        success_count += 1
                         size = DirectoryDisplay.format_size(r.get('size', 0))
                         chapters = r.get('chapters', 0)
                         self.tree.insert('', 'end',
                                          values=(filename, "成功", chapters, size),
                                          tags=('success',))
-                # 默认指向第一个输出文件
                 if results and 'output_file' in results[0]:
                     self.app.set_output_file(os.path.dirname(results[0]['output_file']))
                 print(f"\n✅ 批量转换完成！共处理 {len(results)} 个文件")
-            self.batch_btn.config(state='normal')
+            ok = success_count > 0
+            self.app.flash_btn_done(self.batch_btn, _IDLE, success=ok)
+            self.app.set_nav_badge(1, f'{success_count}✓' if ok else '✗',
+                                   '#86efac' if ok else '#fca5a5')
 
         def _on_error(e):
-            self.batch_btn.config(state='normal')
+            self.app.flash_btn_done(self.batch_btn, _IDLE, success=False)
+            self.app.set_nav_badge(1, '✗', '#fca5a5')
 
         self.app.run_task(_task, on_complete=_on_complete, on_error=_on_error)

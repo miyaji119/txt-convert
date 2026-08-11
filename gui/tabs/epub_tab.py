@@ -413,8 +413,10 @@ class EpubTab(BaseTab):
         """执行生成 EPUB 的完整流程"""
         # 自动判断是否需要先转换（不再需要用户勾选）
         need_convert = not self._is_epub_ready(path)
+        _IDLE_GEN = "🚀 一键转换并生成 EPUB"
+        _work_text = "⏳ 转换+生成中…" if need_convert else "⏳ 生成 EPUB…"
 
-        self.generate_btn.config(state='disabled')
+        self.app.set_btn_working(self.generate_btn, True, _IDLE_GEN, _work_text)
         self.reload_btn.config(state='disabled')
 
         # ===== 阶段 0：初始化日志 =====
@@ -536,20 +538,21 @@ class EpubTab(BaseTab):
             print("=" * 60)
 
             if epub_path:
-                # 更新界面显示输出文件路径
                 self.app.set_output_file(epub_path)
+                self.app.flash_btn_done(self.generate_btn, _IDLE_GEN, success=True)
+                self.app.set_nav_badge(2, '✓', '#86efac')
                 messagebox.showinfo(
                     "成功",
                     f"EPUB 生成完成！\n\n"
                     f"📕 EPUB 文件:\n{epub_path}\n\n"
                     f"💡 可在底部点击「打开文件」按钮直接查看。"
                 )
-                # 如果转换过，更新文件路径显示
                 if need_convert:
                     self.path_var.set(final_txt_path)
                     self._load_catalog(final_txt_path)
-            self.generate_btn.config(
-                state='normal' if EPUB_SUPPORT else 'disabled')
+            else:
+                self.app.flash_btn_done(self.generate_btn, _IDLE_GEN, success=False)
+                self.app.set_nav_badge(2, '✗', '#fca5a5')
             self.reload_btn.config(state='normal')
             self.app.set_status("就绪")
 
@@ -561,8 +564,8 @@ class EpubTab(BaseTab):
                 "失败",
                 f"任务失败：{e}\n\n请查看下方日志区了解详细错误信息。"
             )
-            self.generate_btn.config(
-                state='normal' if EPUB_SUPPORT else 'disabled')
+            self.app.flash_btn_done(self.generate_btn, _IDLE_GEN, success=False)
+            self.app.set_nav_badge(2, '✗', '#fca5a5')
             self.reload_btn.config(state='normal')
             self.app.set_status("失败")
 
