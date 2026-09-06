@@ -91,21 +91,25 @@ class EPUBGenerator:
         def _skip_comment(line: str) -> bool:
             return line.strip().startswith('<!--') or line.strip().startswith('-->')
 
-        # 提取前言（第一个章节之前的内容）
+        # 提取第一章之前的所有内容（标题、作者、文案简介等）
         if structure['chapters']:
             first_start = structure['chapters'][0]['start_line'] - 1
-            intro_lines = []
-            in_intro = False
-            for line in lines[:first_start]:
-                if _skip_comment(line):
-                    continue
-                stripped = line.strip()
-                if any(m in stripped for m in EPUBGenerator.INTRO_MARKERS):
-                    in_intro = True
-                if in_intro or intro_lines:
-                    intro_lines.append(line)
+            intro_lines = [
+                line for line in lines[:first_start]
+                if not _skip_comment(line)
+            ]
+            # 去掉首尾空行
+            while intro_lines and not intro_lines[0].strip():
+                intro_lines.pop(0)
+            while intro_lines and not intro_lines[-1].strip():
+                intro_lines.pop()
             if intro_lines:
-                chapters.append({'title': '前言', 'content': '\n'.join(intro_lines)})
+                has_synopsis = any(
+                    any(m in line for m in EPUBGenerator.INTRO_MARKERS)
+                    for line in intro_lines
+                )
+                title = '文案简介' if has_synopsis else '前言'
+                chapters.append({'title': title, 'content': '\n'.join(intro_lines)})
 
         # 提取各章节内容
         for ch in structure['chapters']:
@@ -207,12 +211,42 @@ class EPUBGenerator:
                 except Exception as e:
                     print(f"⚠️ 添加封面失败: {e}")
 
+            # 插入目录章节（在简介/前言之后）
+            INTRO_TITLES = ('文案简介', '前言')
+            insert_pos = 1 if (chapters and chapters[0]['title'] in INTRO_TITLES) else 0
+
+            # 计算目录插入后各章节的文件编号，构建目录 HTML
+            toc_items_html = []
+            for j, ch in enumerate(chapters):
+                if ch['title'] in INTRO_TITLES:
+                    continue
+                file_idx = j + 2 if j >= insert_pos else j + 1
+                toc_items_html.append(
+                    f'<li><a href="chapter_{file_idx:03d}.xhtml">{html.escape(ch["title"])}</a></li>'
+                )
+            toc_chapter = {
+                'title': '目录',
+                '_html': '<ol class="toc">\n' + '\n'.join(toc_items_html) + '\n</ol>',
+            }
+            chapters.insert(insert_pos, toc_chapter)
+
             # 生成章节
             spine = ['nav']
             toc = []
+            TOC_CSS = (
+                '.toc{list-style:none;padding:0;margin:1em 0}'
+                '.toc li{padding:.45em 0;border-bottom:1px solid #e0e0e0}'
+                '.toc a{text-decoration:none;color:#333;font-size:1em}'
+                '.toc a:hover{text-decoration:underline}'
+            )
             for i, chapter in enumerate(chapters):
-                html_content = EPUBGenerator._chapter_to_html(chapter['content'])
                 chapter_title = chapter['title']
+                if '_html' in chapter:
+                    html_content = chapter['_html']
+                    extra_css = TOC_CSS
+                else:
+                    html_content = EPUBGenerator._chapter_to_html(chapter['content'])
+                    extra_css = ''
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
                 epub_chapter.content = f'''<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -221,6 +255,7 @@ class EPUBGenerator:
 body {{ font-family: "SimSun", "STSong", "Noto Serif CJK SC", serif; font-size: 1em; line-height: 1.8; margin: 1em; text-align: justify; }}
 h1 {{ text-align: center; font-size: 1.5em; margin-bottom: 1.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ccc; }}
 p {{ text-indent: 2em; margin: 0.5em 0; }}
+{extra_css}
 </style>
 </head>
 <body><h1>{chapter_title}</h1>{html_content}</body></html>'''

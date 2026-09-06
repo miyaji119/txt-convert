@@ -1,20 +1,16 @@
-"""TXT 转 EPUB 工具 - GUI 包
-
-使用方式：
-    python3 -m gui           # 作为模块运行
-    python3 gui.py           # 通过兼容入口运行
-"""
+"""TXT 转 EPUB 工具 - GUI 包"""
 
 import os
 import sys
 
-# 将上级目录（txt-convert/）加入 sys.path，确保能导入 encoding/epub 等模块
 _PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-import tkinter as tk
+# 必须在创建根窗口前导入（内部调用 ctk.set_appearance_mode 等）
+import gui.theme  # noqa: F401
 
+import customtkinter as ctk
 from gui.app import TxtToEpubGUI
 from gui.constants import APP_VERSION, APP_TITLE, EPUB_SUPPORT
 
@@ -23,10 +19,9 @@ __all__ = ['main', 'TxtToEpubGUI', 'APP_VERSION', 'APP_TITLE', 'EPUB_SUPPORT']
 
 def main():
     """启动 GUI 应用"""
-    root = tk.Tk()
+    root = ctk.CTk()
     app = TxtToEpubGUI(root)
 
-    # 窗口居中
     root.update_idletasks()
     w = root.winfo_width()
     h = root.winfo_height()

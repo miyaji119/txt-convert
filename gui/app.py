@@ -5,7 +5,9 @@ import sys
 import queue
 import tkinter as tk
 from datetime import datetime
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import filedialog, messagebox
+
+import customtkinter as ctk
 
 from gui.constants import APP_VERSION, APP_TITLE, EPUB_SUPPORT
 from gui.theme import setup_style, COLORS, get_ui_font
@@ -18,71 +20,67 @@ from gui.tabs.batch_tab import BatchTab
 from gui.tabs.epub_tab import EpubTab
 from gui.tabs.catalog_tab import CatalogTab
 
-# 侧边栏配色（深蓝系，与顶部横幅统一）
-_NAV_BG        = '#1e3a8a'   # 底色
-_NAV_ACTIVE    = '#1d4ed8'   # 选中项背景
-_NAV_HOVER     = '#1e40af'   # 悬停背景
-_NAV_INDICATOR = '#60a5fa'   # 左侧激活条
-_NAV_TEXT      = '#93c5fd'   # 未选中文字
-_NAV_TEXT_ACT  = '#ffffff'   # 选中文字
-_NAV_SEP       = '#2d4fa0'   # 分割线
-_NAV_WIDTH     = 172
+# 侧边栏配色（深蓝系）
+_NAV_BG        = '#1e3a8a'
+_NAV_ACTIVE    = '#1d4ed8'
+_NAV_HOVER     = '#1e40af'
+_NAV_INDICATOR = '#60a5fa'
+_NAV_TEXT      = '#93c5fd'
+_NAV_TEXT_ACT  = '#ffffff'
+_NAV_SEP       = '#2d4fa0'
+_NAV_WIDTH     = 180
 
 
 class TxtToEpubGUI:
     """主 GUI 应用类"""
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ctk.CTk):
         self.root = root
         self.root.title(APP_TITLE)
         self.root.geometry("1060x800")
         self.root.minsize(840, 660)
 
         config.load()
-        saved_geometry = config.get('window_geometry', '')
-        if saved_geometry:
+        saved = config.get('window_geometry', '')
+        if saved:
             try:
-                self.root.geometry(saved_geometry)
+                self.root.geometry(saved)
             except tk.TclError:
                 pass
 
         self.log_queue: queue.Queue = queue.Queue()
-        self.task_runner = TaskRunner(
-            self.root, on_task_finished=self._task_finished)
+        self.task_runner = TaskRunner(self.root, on_task_finished=self._task_finished)
         self.current_output_file = None
-
         self.colors = COLORS
-        setup_style(self.root, self.colors)
+        setup_style()
 
-        self._nav_items = []      # [{'frame', 'indicator', 'icon', 'text'}]
-        self._pages = []          # [tk.Frame, ...]  一一对应 _nav_items
+        self._nav_items = []
+        self._pages = []
         self._current_page = 0
 
         self._build_menu()
-        self._build_status_bar()   # side='bottom'，先 pack 才能正确占位
+        self._build_status_bar()
         self._build_main_layout()
 
         sys.stdout = TextRedirector(self.log_queue)
         self._poll_log_queue()
 
-        # 默认选中第 0 页（恢复上次记录）
         last = config.get('last_nav_index', 0)
         self._nav_select(last if 0 <= last < len(self._pages) else 0)
 
         print(f"=== {APP_TITLE} ===")
         print(f"启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         if not EPUB_SUPPORT:
-            print("⚠️ 未检测到 ebooklib 库，EPUB 生成功能不可用")
+            print("⚠️ 未检测到 ebooklib，EPUB 生成功能不可用")
             print("   安装命令: pip install ebooklib pillow requests")
         else:
             print("✓ 已加载 ebooklib，EPUB 生成功能可用")
 
     # ------------------------------------------------------------------
-    # 菜单栏
+    # 菜单（tk.Menu — CTk 无菜单控件）
     # ------------------------------------------------------------------
     def _build_menu(self):
         menubar = tk.Menu(self.root)
-
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="打开 TXT 文件...", command=self._menu_open_txt)
         file_menu.add_command(label="打开文件夹...",   command=self._menu_open_dir)
@@ -96,7 +94,6 @@ class TxtToEpubGUI:
         help_menu.add_command(label="使用说明", command=self._show_help)
         help_menu.add_command(label="关于",     command=self._show_about)
         menubar.add_cascade(label="帮助", menu=help_menu)
-
         self.root.config(menu=menubar)
 
     def _menu_open_txt(self):
@@ -121,19 +118,16 @@ class TxtToEpubGUI:
         messagebox.showinfo("使用说明", (
             "【使用说明】\n\n"
             "1. 单文件转换：选择 TXT 文件，自动提取书名作者，点击「开始转换」\n"
-            "2. 批量转换：选择文件夹，将批量处理所有 TXT 文件\n"
-            "3. EPUB 生成：选择 *_epub_ready.txt 文件，配置封面后生成 EPUB\n"
-            "4. 章节目录：选择 TXT 文件，查看章节列表和统计信息\n\n"
-            "【快捷操作】\n"
-            "- 处理过程中可点击「取消」终止任务\n"
-            "- 完成后可点击「打开输出目录」查看结果\n"
+            "2. 批量转换：选择文件夹，批量处理所有 TXT 文件\n"
+            "3. EPUB 生成：选择文件，配置封面后生成 EPUB\n"
+            "4. 章节目录：查看章节列表和统计信息\n\n"
+            "处理过程中可点击「取消」终止任务。"
         ))
 
     def _show_about(self):
         messagebox.showinfo("关于", (
             f"{APP_TITLE}\n\n"
-            "一款 TXT 小说优化与 EPUB 转换工具\n"
-            "支持多种章节格式识别、批量处理、封面下载\n\n"
+            "TXT 小说优化与 EPUB 转换工具\n\n"
             f"版本: {APP_VERSION}\n"
             "Python: " + sys.version.split()[0] + "\n"
             "EPUB 支持: " + ("✓ 已启用" if EPUB_SUPPORT else "✗ 未启用")
@@ -143,26 +137,19 @@ class TxtToEpubGUI:
     # 主布局
     # ------------------------------------------------------------------
     def _build_main_layout(self):
-        # ── 顶部品牌横幅 ────────────────────────────────────────────────
-        banner = tk.Frame(self.root, bg=self.colors['header_bg'], height=52)
+        banner = ctk.CTkFrame(self.root, fg_color=self.colors['header_bg'],
+                               height=52, corner_radius=0)
         banner.pack(fill='x')
         banner.pack_propagate(False)
+        ctk.CTkLabel(banner, text="📚  TXT 转 EPUB 优化工具",
+                     text_color=self.colors['header_fg'],
+                     font=get_ui_font(15, 'bold'), anchor='w').pack(side='left', padx=18)
+        ctk.CTkLabel(banner, text=f"v{APP_VERSION}",
+                     text_color=self.colors['header_sub'],
+                     font=get_ui_font(9)).pack(side='right', padx=18)
 
-        tk.Label(
-            banner, text="📚  TXT 转 EPUB 优化工具",
-            bg=self.colors['header_bg'], fg=self.colors['header_fg'],
-            font=get_ui_font(15, 'bold'), anchor='w'
-        ).pack(side='left', padx=18)
-        tk.Label(
-            banner, text=f"v{APP_VERSION}",
-            bg=self.colors['header_bg'], fg=self.colors['header_sub'],
-            font=get_ui_font(9)
-        ).pack(side='right', padx=18)
-
-        # ── 主体区：左侧栏 + 右侧内容区 ─────────────────────────────────
-        body = tk.Frame(self.root, bg=self.colors['bg'])
+        body = ctk.CTkFrame(self.root, fg_color=self.colors['bg'], corner_radius=0)
         body.pack(fill='both', expand=True)
-
         self._build_sidebar(body)
         self._build_content_area(body)
 
@@ -170,189 +157,140 @@ class TxtToEpubGUI:
     # 左侧导航栏
     # ------------------------------------------------------------------
     def _build_sidebar(self, parent):
-        sidebar = tk.Frame(parent, bg=_NAV_BG, width=_NAV_WIDTH)
+        sidebar = ctk.CTkFrame(parent, fg_color=_NAV_BG, corner_radius=0,
+                                width=_NAV_WIDTH)
         sidebar.pack(side='left', fill='y')
         sidebar.pack_propagate(False)
 
-        # ── Logo ─────────────────────────────────────────────────────────
-        logo_frame = tk.Frame(sidebar, bg=_NAV_BG)
-        logo_frame.pack(fill='x', padx=12, pady=(16, 8))
-        tk.Label(logo_frame, text="📖", bg=_NAV_BG, fg='#ffffff',
-                 font=get_ui_font(20)).pack(side='left')
-        tk.Label(logo_frame, text=" 工具箱", bg=_NAV_BG, fg='#ffffff',
-                 font=get_ui_font(11, 'bold')).pack(side='left')
+        # Logo
+        logo = ctk.CTkFrame(sidebar, fg_color=_NAV_BG, corner_radius=0)
+        logo.pack(fill='x', padx=14, pady=(16, 8))
+        ctk.CTkLabel(logo, text="📖", fg_color=_NAV_BG, text_color='#ffffff',
+                     font=get_ui_font(18)).pack(side='left')
+        ctk.CTkLabel(logo, text=" 工具箱", fg_color=_NAV_BG, text_color='#ffffff',
+                     font=get_ui_font(11, 'bold')).pack(side='left')
 
-        tk.Frame(sidebar, bg=_NAV_SEP, height=1).pack(fill='x', padx=12, pady=(0, 4))
+        ctk.CTkFrame(sidebar, fg_color=_NAV_SEP, height=1,
+                     corner_radius=0).pack(fill='x', padx=12, pady=(0, 4))
 
-        # ── 可折叠功能组 ──────────────────────────────────────────────────
-        nav_defs = [
+        # 可折叠功能组
+        self._nav_group_collapsed = False
+        self._nav_group_btn = ctk.CTkButton(
+            sidebar, text='  功能  ▾',
+            fg_color='transparent', hover_color=_NAV_HOVER,
+            text_color='#7aa2e8', anchor='w', corner_radius=0,
+            font=get_ui_font(8), height=28,
+            command=self._toggle_nav_group,
+        )
+        self._nav_group_btn.pack(fill='x', padx=6, pady=(0, 2))
+
+        self._nav_group_items_frame = ctk.CTkFrame(sidebar, fg_color=_NAV_BG,
+                                                    corner_radius=0)
+        self._nav_group_items_frame.pack(fill='x')
+
+        for idx, (icon, label) in enumerate([
             ('📄', '单文件转换'),
             ('📁', '批量转换'),
             ('📖', 'EPUB 生成'),
             ('📑', '章节目录'),
-        ]
-        self._nav_group_collapsed = False
-        self._nav_group_items_frame = tk.Frame(sidebar, bg=_NAV_BG)
+        ]):
+            self._nav_items.append(
+                self._make_nav_btn(self._nav_group_items_frame, icon, label, idx))
 
-        # 组头（可点击折叠）
-        group_header = tk.Frame(sidebar, bg=_NAV_BG, cursor='hand2')
-        group_header.pack(fill='x')
+        # 弹性填充
+        ctk.CTkFrame(sidebar, fg_color=_NAV_BG, corner_radius=0).pack(
+            fill='both', expand=True)
 
-        self._nav_group_arrow = tk.Label(
-            group_header, text='▾', bg=_NAV_BG, fg='#7aa2e8',
-            font=get_ui_font(10))
-        self._nav_group_arrow.pack(side='right', padx=(0, 10), pady=6)
-
-        tk.Label(group_header, text='  功能', bg=_NAV_BG,
-                 fg='#7aa2e8', font=get_ui_font(8)).pack(side='left', pady=6)
-
-        for w in (group_header, self._nav_group_arrow):
-            w.bind('<Button-1>', lambda e: self._toggle_nav_group())
-            w.bind('<Enter>', lambda e, ws=(group_header, self._nav_group_arrow):
-                   [x.config(bg=_NAV_HOVER) for x in ws])
-            w.bind('<Leave>', lambda e, ws=(group_header, self._nav_group_arrow):
-                   [x.config(bg=_NAV_BG) for x in ws])
-
-        # 条目
-        self._nav_group_items_frame.pack(fill='x')
-        for idx, (icon, label) in enumerate(nav_defs):
-            item = self._make_nav_btn(self._nav_group_items_frame, icon, label, idx)
-            self._nav_items.append(item)
-
-        # ── 弹性填充 ─────────────────────────────────────────────────────
-        tk.Frame(sidebar, bg=_NAV_BG).pack(fill='both', expand=True)
-
-        # ── 工具区 ────────────────────────────────────────────────────────
-        tk.Frame(sidebar, bg=_NAV_SEP, height=1).pack(fill='x', padx=12, pady=(0, 4))
+        ctk.CTkFrame(sidebar, fg_color=_NAV_SEP, height=1,
+                     corner_radius=0).pack(fill='x', padx=12, pady=(0, 4))
         self._make_util_btn(sidebar, '⚙', '设置', self._show_settings)
         self._log_nav_btn = self._make_util_btn(
             sidebar, '📋', '日志 ▼', self._toggle_log)
-
-        tk.Frame(sidebar, bg=_NAV_BG, height=8).pack()
+        ctk.CTkFrame(sidebar, fg_color=_NAV_BG, height=8).pack()
 
     def _toggle_nav_group(self):
-        """折叠/展开功能导航组"""
         self._nav_group_collapsed = not self._nav_group_collapsed
         if self._nav_group_collapsed:
             self._nav_group_items_frame.pack_forget()
-            self._nav_group_arrow.config(text='▸')
+            self._nav_group_btn.configure(text='  功能  ▸')
         else:
             self._nav_group_items_frame.pack(fill='x')
-            self._nav_group_arrow.config(text='▾')
+            self._nav_group_btn.configure(text='  功能  ▾')
 
     def _make_nav_btn(self, parent, icon, label, idx):
-        """创建一个导航条目，返回组件字典"""
-        btn = tk.Frame(parent, bg=_NAV_BG, cursor='hand2')
-        btn.pack(fill='x')
+        container = ctk.CTkFrame(parent, fg_color=_NAV_BG, corner_radius=0, height=44)
+        container.pack(fill='x')
+        container.pack_propagate(False)
 
-        # 左侧激活指示条（3px）
-        indicator = tk.Frame(btn, width=3, bg=_NAV_BG)
+        indicator = ctk.CTkFrame(container, width=3, fg_color=_NAV_BG, corner_radius=0)
         indicator.pack(side='left', fill='y')
         indicator.pack_propagate(False)
 
-        icon_lbl = tk.Label(btn, text=icon, bg=_NAV_BG, fg=_NAV_TEXT,
-                            font=get_ui_font(16))
-        icon_lbl.pack(side='left', padx=(10, 6), pady=12)
+        btn = ctk.CTkButton(
+            container,
+            text=f"{icon}  {label}",
+            fg_color='transparent',
+            hover_color=_NAV_HOVER,
+            text_color=_NAV_TEXT,
+            anchor='w',
+            corner_radius=6,
+            font=get_ui_font(11),
+            command=lambda i=idx: self._nav_select(i),
+        )
+        btn.pack(side='left', fill='both', expand=True, padx=(2, 4), pady=3)
 
-        text_lbl = tk.Label(btn, text=label, bg=_NAV_BG, fg=_NAV_TEXT,
-                            font=get_ui_font(10), anchor='w')
-        text_lbl.pack(side='left', fill='x', expand=True, pady=12)
+        badge = ctk.CTkLabel(container, text='', text_color='#86efac',
+                              fg_color='transparent', font=get_ui_font(8), width=24)
+        badge.pack(side='right', padx=(0, 8))
 
-        # 右侧 badge（状态小标记，默认隐藏）
-        badge_lbl = tk.Label(btn, text='', bg=_NAV_BG, fg='#86efac',
-                             font=get_ui_font(8))
-        badge_lbl.pack(side='right', padx=(0, 8))
-
-        item = {'frame': btn, 'indicator': indicator,
-                'icon': icon_lbl, 'text': text_lbl, 'badge': badge_lbl}
-
-        for w in (btn, icon_lbl, text_lbl, badge_lbl):
-            w.bind('<Button-1>', lambda e, i=idx: self._nav_select(i))
-            w.bind('<Enter>',    lambda e, i=idx: self._on_nav_enter(i))
-            w.bind('<Leave>',    lambda e, i=idx: self._on_nav_leave(i, e))
-
-        return item
+        return {'container': container, 'indicator': indicator,
+                'button': btn, 'badge': badge}
 
     def set_nav_badge(self, idx: int, text: str, color: str = '#86efac'):
-        """在第 idx 个导航项右侧显示一个小 badge（空字符串=隐藏）"""
         if 0 <= idx < len(self._nav_items):
             item = self._nav_items[idx]
-            item['badge'].config(text=text, fg=color)
-            # 2 秒后自动清除
+            item['badge'].configure(text=text, text_color=color)
             if text:
-                self.root.after(2000, lambda: item['badge'].config(text=''))
+                self.root.after(2000, lambda: item['badge'].configure(text=''))
 
     def _make_util_btn(self, parent, icon, label, command):
-        """底部工具按钮（设置、日志折叠）"""
-        btn = tk.Frame(parent, bg=_NAV_BG, cursor='hand2')
-        btn.pack(fill='x')
-
-        icon_lbl = tk.Label(btn, text=icon, bg=_NAV_BG, fg=_NAV_TEXT,
-                            font=get_ui_font(13))
-        icon_lbl.pack(side='left', padx=(13, 6), pady=10)
-
-        text_lbl = tk.Label(btn, text=label, bg=_NAV_BG, fg=_NAV_TEXT,
-                            font=get_ui_font(9), anchor='w')
-        text_lbl.pack(side='left', fill='x', expand=True)
-
-        for w in (btn, icon_lbl, text_lbl):
-            w.bind('<Button-1>', lambda e: command())
-            w.bind('<Enter>',
-                   lambda e, ws=(btn, icon_lbl, text_lbl):
-                   [x.config(bg=_NAV_HOVER) for x in ws])
-            w.bind('<Leave>',
-                   lambda e, ws=(btn, icon_lbl, text_lbl):
-                   [x.config(bg=_NAV_BG) for x in ws])
-
-        return {'frame': btn, 'icon': icon_lbl, 'text': text_lbl}
+        btn = ctk.CTkButton(
+            parent,
+            text=f"{icon}  {label}",
+            fg_color='transparent',
+            hover_color=_NAV_HOVER,
+            text_color=_NAV_TEXT,
+            anchor='w',
+            corner_radius=6,
+            font=get_ui_font(10),
+            height=36,
+            command=command,
+        )
+        btn.pack(fill='x', padx=8, pady=2)
+        return btn
 
     def _nav_select(self, idx: int):
-        """切换到第 idx 个页面并高亮对应导航项"""
         for i, item in enumerate(self._nav_items):
             active = (i == idx)
-            bg = _NAV_ACTIVE if active else _NAV_BG
-            item['frame'].config(bg=bg)
-            item['indicator'].config(bg=_NAV_INDICATOR if active else _NAV_BG)
-            item['icon'].config(bg=bg, fg=_NAV_TEXT_ACT if active else _NAV_TEXT)
-            item['text'].config(bg=bg, fg=_NAV_TEXT_ACT if active else _NAV_TEXT)
-
+            item['indicator'].configure(
+                fg_color=_NAV_INDICATOR if active else _NAV_BG)
+            item['button'].configure(
+                fg_color=_NAV_ACTIVE if active else 'transparent',
+                text_color=_NAV_TEXT_ACT if active else _NAV_TEXT,
+            )
         if 0 <= idx < len(self._pages):
             self._pages[idx].lift()
         self._current_page = idx
-
-    def _on_nav_enter(self, idx: int):
-        if idx == self._current_page:
-            return
-        item = self._nav_items[idx]
-        for w in (item['frame'], item['icon'], item['text']):
-            w.config(bg=_NAV_HOVER)
-
-    def _on_nav_leave(self, idx: int, event):
-        if idx == self._current_page:
-            return
-        # 只有鼠标真正离开整个按钮区域才还原（避免子控件边界闪烁）
-        item = self._nav_items[idx]
-        f = item['frame']
-        try:
-            rx, ry = event.x_root, event.y_root
-            fx, fy = f.winfo_rootx(), f.winfo_rooty()
-            fw, fh = f.winfo_width(), f.winfo_height()
-            if fx <= rx <= fx + fw and fy <= ry <= fy + fh:
-                return
-        except Exception:
-            pass
-        for w in (f, item['icon'], item['text']):
-            w.config(bg=_NAV_BG)
 
     # ------------------------------------------------------------------
     # 右侧内容区
     # ------------------------------------------------------------------
     def _build_content_area(self, parent):
-        right = tk.Frame(parent, bg=self.colors['bg'])
+        right = ctk.CTkFrame(parent, fg_color=self.colors['bg'], corner_radius=0)
         right.pack(side='left', fill='both', expand=True)
 
-        # ── 页面容器（各 Tab 叠放，通过 lift 切换）─────────────────────
-        self._page_container = tk.Frame(right, bg=self.colors['bg'])
+        self._page_container = ctk.CTkFrame(right, fg_color=self.colors['bg'],
+                                             corner_radius=0)
         self._page_container.pack(fill='both', expand=True)
 
         self.tab_convert = ConvertTab(self._page_container, self)
@@ -361,118 +299,112 @@ class TxtToEpubGUI:
         self.tab_catalog = CatalogTab(self._page_container, self)
 
         self._pages = [
-            self.tab_convert.frame,
-            self.tab_batch.frame,
-            self.tab_epub.frame,
-            self.tab_catalog.frame,
+            self.tab_convert._page,
+            self.tab_batch._page,
+            self.tab_epub._page,
+            self.tab_catalog._page,
         ]
         for page in self._pages:
             page.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # ── 日志区（可折叠）──────────────────────────────────────────────
         self._build_log_area(right)
-
-        # ── 底部操作栏 ───────────────────────────────────────────────────
         self._build_action_bar(right)
 
     def _build_log_area(self, parent):
-        self.log_frame = ttk.Frame(parent)
+        self.log_frame = ctk.CTkFrame(parent, fg_color='transparent', corner_radius=0)
         self.log_frame.pack(fill='x', padx=12, pady=(4, 2))
 
-        log_header = ttk.Frame(self.log_frame)
+        log_header = ctk.CTkFrame(self.log_frame, fg_color='transparent')
         log_header.pack(fill='x')
-        ttk.Label(log_header, text="日志输出",
-                  style='Muted.TLabel').pack(side='left')
-        self.log_toggle_btn = ttk.Button(
-            log_header, text="▼ 隐藏", width=8,
-            command=self._toggle_log)
+        ctk.CTkLabel(log_header, text="日志输出", text_color='#9ba8b7',
+                     font=get_ui_font(9)).pack(side='left')
+        self.log_toggle_btn = ctk.CTkButton(
+            log_header, text="▼ 隐藏", width=72, height=26,
+            font=get_ui_font(9), command=self._toggle_log,
+        )
         self.log_toggle_btn.pack(side='right')
 
-        self.log_text = scrolledtext.ScrolledText(
-            self.log_frame, height=6, wrap='word',
+        self.log_text = ctk.CTkTextbox(
+            self.log_frame, height=130, wrap='word',
             font=('Menlo' if sys.platform == 'darwin' else 'Consolas', 10),
-            bg=self.colors['log_bg'], fg=self.colors['log_fg'],
-            insertbackground=self.colors['log_fg'],
-            selectbackground='#3b4261',
-            relief='flat', padx=10, pady=8,
+            fg_color='#0d1117', text_color='#e2e8f0',
+            border_width=0, corner_radius=6,
         )
-        self.log_text.pack(fill='both', expand=True)
+        self.log_text.pack(fill='both', expand=True, pady=(4, 0))
         self.log_text.configure(state='disabled')
         self.log_visible = True
 
-        self.log_text.tag_config('INFO',    foreground='#e2e8f0')
-        self.log_text.tag_config('SUCCESS', foreground='#86efac')
-        self.log_text.tag_config('WARNING', foreground='#fcd34d')
-        self.log_text.tag_config('ERROR',   foreground='#fca5a5')
-        self.log_text.tag_config('DEBUG',   foreground='#67e8f9')
+        for tag, color in [
+            ('INFO', '#e2e8f0'), ('SUCCESS', '#86efac'),
+            ('WARNING', '#fcd34d'), ('ERROR', '#fca5a5'), ('DEBUG', '#67e8f9'),
+        ]:
+            self.log_text._textbox.tag_configure(tag, foreground=color)
 
     def _build_action_bar(self, parent):
-        # 输出文件路径行
-        output_bar = ttk.Frame(parent)
+        output_bar = ctk.CTkFrame(parent, fg_color='transparent')
         output_bar.pack(fill='x', padx=12, pady=(4, 0))
-        ttk.Label(output_bar, text="输出文件:",
-                  style='Muted.TLabel').pack(side='left')
-        self.output_path_var = tk.StringVar(value="（暂无）")
-        lbl = ttk.Label(output_bar, textvariable=self.output_path_var,
-                        foreground=self.colors['accent'], cursor='hand2')
-        lbl.pack(side='left', padx=(8, 0), fill='x', expand=True)
-        lbl.bind('<Button-1>', lambda e: self._open_output_file())
+        ctk.CTkLabel(output_bar, text="输出文件:", text_color='#9ba8b7',
+                     font=get_ui_font(9)).pack(side='left')
+        self.output_path_lbl = ctk.CTkLabel(
+            output_bar, text="（暂无）",
+            text_color=self.colors['accent'],
+            anchor='w', font=get_ui_font(9), cursor='hand2',
+        )
+        self.output_path_lbl.pack(side='left', padx=(8, 0), fill='x', expand=True)
+        self.output_path_lbl.bind('<Button-1>', lambda e: self._open_output_file())
 
-        # 进度条 + 按钮行
-        bar = ttk.Frame(parent)
+        bar = ctk.CTkFrame(parent, fg_color='transparent')
         bar.pack(fill='x', padx=12, pady=(4, 10))
 
-        self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(
-            bar, orient='horizontal', mode='determinate',
-            variable=self.progress_var, maximum=100,
-        )
+        self.progress_bar = ctk.CTkProgressBar(bar, mode='determinate', height=12)
+        self.progress_bar.set(0)
         self.progress_bar.pack(side='left', fill='x', expand=True, padx=(0, 10))
 
-        self.progress_label = ttk.Label(bar, text="就绪",
-                                        style='Muted.TLabel', width=12, anchor='e')
+        self.progress_label = ctk.CTkLabel(bar, text="就绪", text_color='#9ba8b7',
+                                            width=90, anchor='e', font=get_ui_font(9))
         self.progress_label.pack(side='left', padx=(0, 10))
 
-        self.cancel_btn = ttk.Button(bar, text="取消", state='disabled',
-                                     command=self._cancel_task)
+        self.cancel_btn = ctk.CTkButton(bar, text="取消", state='disabled',
+                                         command=self._cancel_task,
+                                         width=70, font=get_ui_font(9))
         self.cancel_btn.pack(side='right', padx=(4, 0))
 
-        self.open_file_btn = ttk.Button(bar, text="打开文件",
-                                        command=self._open_output_file,
-                                        state='disabled')
+        self.open_file_btn = ctk.CTkButton(bar, text="打开文件",
+                                            command=self._open_output_file,
+                                            state='disabled',
+                                            width=80, font=get_ui_font(9))
         self.open_file_btn.pack(side='right', padx=(4, 0))
 
-        self.open_dir_btn = ttk.Button(bar, text="打开输出目录",
-                                       command=self._open_output_dir,
-                                       state='disabled')
+        self.open_dir_btn = ctk.CTkButton(bar, text="打开输出目录",
+                                           command=self._open_output_dir,
+                                           state='disabled',
+                                           width=110, font=get_ui_font(9))
         self.open_dir_btn.pack(side='right', padx=(4, 0))
 
-        self.clear_log_btn = ttk.Button(bar, text="清空日志",
-                                        command=self._clear_log)
+        self.clear_log_btn = ctk.CTkButton(bar, text="清空日志",
+                                            command=self._clear_log,
+                                            width=80, font=get_ui_font(9))
         self.clear_log_btn.pack(side='right', padx=(4, 0))
 
     def _build_status_bar(self):
-        status = tk.Frame(self.root, bg=self.colors['panel'],
-                          highlightbackground=self.colors['border'],
-                          highlightthickness=1)
+        status = ctk.CTkFrame(self.root, fg_color=self.colors['panel'],
+                               corner_radius=0, height=28)
         status.pack(fill='x', side='bottom')
+        status.pack_propagate(False)
 
-        self._dot_canvas = tk.Canvas(status, width=10, height=10,
-                                     bg=self.colors['panel'],
-                                     highlightthickness=0)
-        self._dot_canvas.pack(side='left', padx=(10, 4), pady=5)
-        self._dot = self._dot_canvas.create_oval(1, 1, 9, 9,
-                                                  fill=self.colors['success'],
-                                                  outline='')
+        self._dot_lbl = ctk.CTkLabel(status, text="●",
+                                      text_color=self.colors['success'],
+                                      font=get_ui_font(11))
+        self._dot_lbl.pack(side='left', padx=(10, 4), pady=4)
 
-        self.status_var = tk.StringVar(value="就绪")
-        tk.Label(status, textvariable=self.status_var,
-                 bg=self.colors['panel'], fg=self.colors['text_muted'],
-                 font=get_ui_font(9)).pack(side='left', pady=4)
+        self.status_lbl = ctk.CTkLabel(status, text="就绪",
+                                        text_color=self.colors['text_muted'],
+                                        font=get_ui_font(9))
+        self.status_lbl.pack(side='left', pady=4)
 
-        tk.Label(status, text="TXT → EPUB",
-                 bg=self.colors['panel'], fg=self.colors['border'],
-                 font=get_ui_font(9)).pack(side='right', padx=10, pady=4)
+        ctk.CTkLabel(status, text="TXT → EPUB",
+                     text_color=self.colors['border'],
+                     font=get_ui_font(9)).pack(side='right', padx=10, pady=4)
 
     # ------------------------------------------------------------------
     # 日志与进度
@@ -480,15 +412,13 @@ class TxtToEpubGUI:
     def _toggle_log(self):
         if self.log_visible:
             self.log_text.pack_forget()
-            self.log_toggle_btn.config(text="▲ 显示")
-            if hasattr(self, '_log_nav_btn'):
-                self._log_nav_btn['text'].config(text='日志 ▲')
+            self.log_toggle_btn.configure(text="▲ 显示")
+            self._log_nav_btn.configure(text='📋  日志 ▲')
             self.log_visible = False
         else:
-            self.log_text.pack(fill='both', expand=True)
-            self.log_toggle_btn.config(text="▼ 隐藏")
-            if hasattr(self, '_log_nav_btn'):
-                self._log_nav_btn['text'].config(text='日志 ▼')
+            self.log_text.pack(fill='both', expand=True, pady=(4, 0))
+            self.log_toggle_btn.configure(text="▼ 隐藏")
+            self._log_nav_btn.configure(text='📋  日志 ▼')
             self.log_visible = True
 
     def _poll_log_queue(self):
@@ -501,7 +431,6 @@ class TxtToEpubGUI:
         self.root.after(80, self._poll_log_queue)
 
     def _append_log(self, text: str):
-        self.log_text.configure(state='normal')
         tag = 'INFO'
         if '✅' in text or '✓' in text or '完成' in text:
             tag = 'SUCCESS'
@@ -511,8 +440,10 @@ class TxtToEpubGUI:
             tag = 'ERROR'
         elif '[DEBUG]' in text:
             tag = 'DEBUG'
-        self.log_text.insert('end', text + ('\n' if not text.endswith('\n') else ''), tag)
-        self.log_text.see('end')
+        self.log_text.configure(state='normal')
+        body = text + ('\n' if not text.endswith('\n') else '')
+        self.log_text._textbox.insert('end', body, tag)
+        self.log_text._textbox.see('end')
         self.log_text.configure(state='disabled')
 
     def _clear_log(self):
@@ -521,19 +452,19 @@ class TxtToEpubGUI:
         self.log_text.configure(state='disabled')
 
     def set_progress(self, value: float, label: str = None):
-        self.progress_var.set(value)
+        self.progress_bar.set(value / 100.0)
         if label:
-            self.progress_label.config(text=label)
+            self.progress_label.configure(text=label)
 
     def set_status(self, text: str):
-        self.status_var.set(text)
+        self.status_lbl.configure(text=text)
         if '失败' in text or '错误' in text or '取消' in text:
             dot_color = self.colors['error']
         elif '处理' in text or '加载' in text or '生成' in text or '转换' in text or '保存' in text:
             dot_color = self.colors['warning']
         else:
             dot_color = self.colors['success']
-        self._dot_canvas.itemconfig(self._dot, fill=dot_color)
+        self._dot_lbl.configure(text_color=dot_color)
 
     # ------------------------------------------------------------------
     # 任务执行
@@ -546,25 +477,21 @@ class TxtToEpubGUI:
     def cancel_flag(self):
         return self.task_runner.cancel_flag
 
-    def run_task(self, target, args=(), kwargs=None,
-                 on_complete=None, on_error=None):
+    def run_task(self, target, args=(), kwargs=None, on_complete=None, on_error=None):
         if self.worker_thread and self.worker_thread.is_alive():
             messagebox.showwarning("提示", "已有任务正在运行，请等待完成或取消")
             return
-
         self.set_progress(0, "处理中...")
         self.set_status("处理中...")
-        self.cancel_btn.config(state='normal')
-
+        self.cancel_btn.configure(state='normal')
         kwargs = kwargs or {}
-        if not self.task_runner.submit(
-            target, *args,
-            on_complete=on_complete, on_error=on_error, **kwargs
-        ):
+        if not self.task_runner.submit(target, *args,
+                                       on_complete=on_complete,
+                                       on_error=on_error, **kwargs):
             messagebox.showwarning("提示", "已有任务正在运行，请等待完成或取消")
 
     def _task_finished(self):
-        self.cancel_btn.config(state='disabled')
+        self.cancel_btn.configure(state='disabled')
         if self.cancel_flag.is_set():
             self.set_status("已取消")
             self.set_progress(0, "已取消")
@@ -628,20 +555,20 @@ class TxtToEpubGUI:
                 size_str = f"({size/1024:.1f} KB)"
             else:
                 size_str = f"({size} B)"
-            self.output_path_var.set(f"{path}  {size_str}")
-            self.open_file_btn.config(state='normal')
-            self.open_dir_btn.config(state='normal')
+            self.output_path_lbl.configure(text=f"{path}  {size_str}")
+            self.open_file_btn.configure(state='normal')
+            self.open_dir_btn.configure(state='normal')
         elif path:
-            self.output_path_var.set(path)
-            self.open_file_btn.config(state='disabled')
-            self.open_dir_btn.config(state='normal')
+            self.output_path_lbl.configure(text=path)
+            self.open_file_btn.configure(state='disabled')
+            self.open_dir_btn.configure(state='normal')
         else:
-            self.output_path_var.set("（暂无）")
-            self.open_file_btn.config(state='disabled')
-            self.open_dir_btn.config(state='disabled')
+            self.output_path_lbl.configure(text="（暂无）")
+            self.open_file_btn.configure(state='disabled')
+            self.open_dir_btn.configure(state='disabled')
 
     # ------------------------------------------------------------------
-    # 配置代理（供 BaseTab 访问，避免直接 import config）
+    # 配置代理
     # ------------------------------------------------------------------
     def config_get_recent_files(self):
         return config.get_recent_files()
@@ -652,29 +579,21 @@ class TxtToEpubGUI:
     # ------------------------------------------------------------------
     # 按钮内联进度反馈
     # ------------------------------------------------------------------
-    def set_btn_working(self, btn: 'ttk.Button', working: bool,
-                        idle_text: str, working_text: str = None):
-        """切换按钮的「工作中」外观。
-
-        working=True  → 禁用按钮，文字改为 working_text（如「⏳ 转换中…」）
-        working=False → 恢复 idle_text 并启用
-        """
+    def set_btn_working(self, btn, working: bool, idle_text: str,
+                        working_text: str = None):
         if working:
-            btn.config(state='disabled',
-                       text=working_text or f"⏳ {idle_text}…")
+            btn.configure(state='disabled',
+                          text=working_text or f"⏳ {idle_text}…")
         else:
-            btn.config(state='normal', text=idle_text)
+            btn.configure(state='normal', text=idle_text)
 
-    def flash_btn_done(self, btn: 'ttk.Button', idle_text: str,
-                       success: bool = True):
-        """任务完成后让按钮短暂显示结果文字，1.2 秒后恢复。"""
+    def flash_btn_done(self, btn, idle_text: str, success: bool = True):
         flash_text = "✅ 完成" if success else "❌ 失败"
-        btn.config(text=flash_text)
-        self.root.after(1200, lambda: btn.config(
-            state='normal', text=idle_text))
+        btn.configure(text=flash_text)
+        self.root.after(1200, lambda: btn.configure(state='normal', text=idle_text))
 
     # ------------------------------------------------------------------
-    # 关闭处理
+    # 关闭
     # ------------------------------------------------------------------
     def _on_close(self):
         if self.worker_thread and self.worker_thread.is_alive():

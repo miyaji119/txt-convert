@@ -1,4 +1,212 @@
+# v2.3 变更记录
+
+> **版本**: v2.3
+> **日期**: 2026-08-31
+> **变更范围**: Web UI 发布、广告/水印过滤、多书合并检测、EPUB 结构改进
+
+---
+
+## 一、变更概览
+
+| 模块 | 内容 | 新增文件 | 修改文件 |
+|------|------|---------|---------|
+| Web UI | FastAPI 服务器 + 浏览器界面 | `web_server.py`, `static/index.html` | — |
+| 广告过滤 | 多信号评分，连续块删除 | `adfilter.py` | `easypub.py` |
+| 水印清理 | 独立行水印识别与删除 | `namecleaner.py` | `easypub.py` |
+| 一致性检测 | 跨章节内容检测，多书合并识别 | `consistency.py` | `easypub.py`, `web_server.py` |
+| EPUB 结构 | 文案简介保留、目录页生成 | — | `epub.py` |
+
+---
+
+## 二、Web UI
+
+### `web_server.py`（新增，~320 行）
+
+**架构**：FastAPI + uvicorn，单命令启动，自动打开浏览器。
+
+- **日志捕获**：`_Tee` 类劫持 `sys.stdout`，将每行写入 `asyncio.Queue`
+- **SSE 日志流**：`GET /api/logs/stream`，浏览器 `EventSource` 实时接收
+- **自动退出**：SSE 连接断开（浏览器关闭标签）后 4 秒无新连接则 `os.kill(SIGINT)`
+- **macOS 文件对话框**：`osascript choose file/folder`，避开 tkinter 主线程限制
+- **线程安全**：所有阻塞 Python 函数通过 `ThreadPoolExecutor` + `run_in_executor` 执行
+
+#### API 端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /` | 返回 `static/index.html` |
+| `GET /api/logs/stream` | SSE 日志流 |
+| `POST /api/dialog` | 打开文件/文件夹选择对话框 |
+| `GET /api/recent` | 最近文件/目录列表 |
+| `POST /api/extract-meta` | 提取书名/作者/文件大小 |
+| `POST /api/convert` | 单文件转换 |
+| `POST /api/batch` | 批量转换 |
+| `POST /api/epub` | 生成 EPUB |
+| `POST /api/catalog/analyze` | 章节结构分析 |
+| `POST /api/open-in-finder` | 在 Finder 中显示 |
+| `POST /api/open-file` | 用默认程序打开文件 |
+
+### `static/index.html`（新增，~700 行）
+
+**技术栈**：Tailwind CSS（CDN）+ Alpine.js（CDN），零构建步骤。
+
+**视觉设计**：
+
+- 深色主题（`#0b0e12` 底色，琥珀 `#d97706` 强调色）
+- 浅色主题（暖纸白 `#f5f0e8`，棕琥珀 `#b45309`），CSS 变量切换
+- 偏好保存在 `localStorage`
+- 动画进度条（shimmer 效果 / 绿色完成 / 红色失败）
+- Toast 通知（滑入动画，4 秒自动消失）
+- 导航徽标（`✓`/`✗`/章节数）
+- JetBrains Mono 字体用于日志面板
+
+**交互特性**：
+
+- 文件选择后自动调用 `/api/extract-meta`，书名/作者自动填充并显示「自动识别」标签
+- 用户手动修改输入框后标签消失（`@input` 设置 `edited` 标志）
+- SSE 连接断线后 3 秒自动重连
+
+---
+
+## 三、广告过滤 `adfilter.py`（新增，~110 行）
+
+### 评分机制
+
+每行打 0–1 广告概率分：
+
+| 信号 | 分值 |
+|------|------|
+| URL / 域名 | 0.88 |
+| 平台名称 + 关键词（笔趣阁、起点等） | 0.82 |
+| 硬关键词（下载APP、扫码、公众号等） | 0.78 |
+| 软关键词累加（书友、更新最快等） | +0.18/个 |
+| 短行（< 20 字） | +0.08 |
+| 文件首尾 30 行（near_boundary） | ×1.4 |
+
+### 过滤规则
+
+- 单行分值 ≥ 0.68 → 删除
+- 连续 ≥3 行分值均 ≥ 0.45 → 整块删除
+- 章节标题行（`第X章/卷`）永远豁免
+- 过滤后合并多余空行（保留最多 2 个）
+
+### 集成
+
+`convert_for_easypub()` 读文件后、`ChapterAnalyzer` 之前调用，输出 `🧹 过滤广告行: N 行`。
+
+---
+
+## 四、水印清理 `namecleaner.py`（新增，~100 行）
+
+### 角色名单提取
+
+从全文提取合法角色名（豁免集合）：
+
+- 动作动词前缀：`X说道/问道/道/喊道` 等
+- 引号/冒号前缀：`X：…` / `X「…`
+
+### 检测逻辑
+
+候选独立行需同时满足：
+
+1. 纯汉字 2–8 字（`[一-龥·]{2,8}`）
+2. 前后均为空行（独立行）
+3. 不是章节标题（`第X章/卷`）
+4. 不在角色名单中（包含子串匹配）
+
+### 集成
+
+`AdFilter` 之后调用，输出 `🔤 清理独立行水印: 落叶知秋、书友521 共 N 处`。
+
+---
+
+## 五、一致性检测 `consistency.py`（新增，~120 行）
+
+### 实体提取
+
+每章提取：
+
+- **人名**：动作动词前缀 + 引号前缀（同 NameCleaner 逻辑）
+- **地名**：`[一-龥]{1,4}[城国山河殿宫门村镇县府道阁岛峰谷林原界域]`
+
+### 检测算法
+
+滑动窗口比较：
+
+```
+left_pool = union(entities[i-3 : i])   # 前3章实体池
+current   = entities[i]
+
+若 len(left_pool) >= 4 且 len(current) >= 3 且 overlap == 0:
+    zero_streak += 1
+    if zero_streak >= 2: → ContentMismatchError
+```
+
+### 错误处理
+
+`ContentMismatchError` 携带：
+
+- `split_after`：断裂章节索引
+- `left_title` / `right_title`：断裂前后章节标题
+- `left_sample` / `right_sample`：各 6 个实体示例
+
+**Web 端**：`ContentMismatchError` → HTTP 422，诊断信息显示在 Toast。
+
+**跳过**：`convert_for_easypub(..., ignore_mismatch=True)`。
+
+---
+
+## 六、EPUB 结构改进（`epub.py`）
+
+### 文案简介保留
+
+**原逻辑**：仅从 `INTRO_MARKERS`（`文案：`/`简介：`）出现后开始收集，标题/作者行等前置内容丢失。
+
+**新逻辑**：收集第一章之前的**所有**非注释行，首尾空行去掉后作为独立章节；含简介标记则命名「文案简介」，否则命名「前言」。
+
+### 目录页生成
+
+在「文案简介/前言」之后插入目录章节：
+
+- `<ol class="toc">` 列表，每项 `<a href="chapter_NNN.xhtml">` 超链接
+- 文件编号计算时已偏移（+1 for TOC），链接不错位
+- 目录 CSS 独立内联，不影响正文章节
+
+### 章节生成逻辑
+
+新增 `_html` 键支持：若章节 dict 含 `_html`，直接使用该 HTML 内容，跳过 `_chapter_to_html()`。目录章节和未来其他特殊章节可用此机制。
+
+---
+
+## 七、`easypub.py` 变更
+
+### 函数签名
+
+```python
+def convert_for_easypub(
+    input_file, output_file=None, book_title="", author="",
+    show_catalog=True,
+    ignore_mismatch=False,    # 新增：跳过一致性检测
+) -> Tuple[Optional[str], Optional[Dict]]:
+```
+
+### 新增调用链
+
+```
+读文件
+  → AdFilter.filter_content()        # 广告过滤
+  → NameCleaner.clean()              # 水印清理
+  → ChapterAnalyzer.analyze()        # 章节分析
+  → ConsistencyChecker.check()       # 一致性检测（可跳过）
+  → EasyPubOptimizer.optimize()      # 优化
+  → 写文件
+```
+
+---
+
 # v2.0 代码变更总结
+
+
 
 > **版本**: v2.0  
 > **日期**: 2026-08-10  

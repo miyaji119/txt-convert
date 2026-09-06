@@ -9,6 +9,9 @@ from typing import Optional, Dict, List, Tuple
 from encoding import EncodingDetector
 from display import DirectoryDisplay
 from chapter import ChapterAnalyzer
+from adfilter import AdFilter
+from namecleaner import NameCleaner
+from consistency import ConsistencyChecker, ContentMismatchError
 
 
 class EasyPubOptimizer:
@@ -139,7 +142,7 @@ class EasyPubOptimizer:
         return optimized_text, {'total_chapters': total_chapters, 'chapters': chapters, 'total_lines': len(optimized_lines), 'total_chars': len(optimized_text)}
 
 
-def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True) -> Tuple[Optional[str], Optional[Dict]]:
+def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True, ignore_mismatch: bool = False) -> Tuple[Optional[str], Optional[Dict]]:
     if output_file is None:
         base_name = os.path.splitext(input_file)[0]
         output_file = f"{base_name}_epub_ready.txt"
@@ -154,10 +157,26 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
         print(f"   ❌ 无法读取文件: {e}")
         return None, None
 
+    content, ad_count = AdFilter.filter_content(content)
+    if ad_count:
+        print(f"   🧹 过滤广告行: {ad_count} 行")
+
+    content, wm_count, wm_list = NameCleaner.clean(content)
+    if wm_count:
+        preview = '、'.join(wm_list[:5])
+        suffix = f' 等 {wm_count} 处' if wm_count > 5 else f' 共 {wm_count} 处'
+        print(f"   🔤 清理独立行水印: {preview}{suffix}")
+
     # 使用ChapterAnalyzer获取准确的章节信息
     chapter_structure = ChapterAnalyzer.analyze_chapter_structure(content, config_name='default')
     accurate_chapters = chapter_structure['total_chapters']
     print(f"   原始章节: {accurate_chapters}个")
+
+    # 跨章节内容一致性检测
+    if not ignore_mismatch:
+        mismatch = ConsistencyChecker.check(content, chapter_structure)
+        if mismatch:
+            raise ContentMismatchError(mismatch)
 
     # 传递章节信息给optimize_for_epub，让它过滤误识别的章节
     optimized_content, analysis = EasyPubOptimizer.optimize_for_epub(content, book_title, author, chapter_structure)

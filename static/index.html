@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>TXT → EPUB</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+:root {
+  --ink:    #0b0e12;
+  --panel:  #131820;
+  --card:   #1a2130;
+  --border: rgba(255,255,255,.06);
+  --bh:     rgba(255,255,255,.10);
+  --amber:  #d97706;
+  --text:   #ddd5c0;
+  --muted:  #8094aa;
+  --dim:    #506278;
+  --log-bg:          #050709;
+  --log-empty:       #3a5068;
+  --toast-ok-bg:     rgba(5,18,10,.97);
+  --toast-ok-bd:     rgba(52,211,153,.2);
+  --toast-err-bg:    rgba(18,5,5,.97);
+  --toast-err-bd:    rgba(248,113,113,.2);
+}
+[data-theme="light"] {
+  --ink:    #f5f0e8;
+  --panel:  #ece6d8;
+  --card:   #ffffff;
+  --border: rgba(0,0,0,.08);
+  --bh:     rgba(0,0,0,.14);
+  --amber:  #b45309;
+  --text:   #2c2416;
+  --muted:  #6a5f50;
+  --dim:    #8a7f72;
+  --log-bg:          #f0ebe0;
+  --log-empty:       #a09585;
+  --toast-ok-bg:     rgba(240,255,248,.98);
+  --toast-ok-bd:     rgba(52,211,153,.4);
+  --toast-err-bg:    rgba(255,242,242,.98);
+  --toast-err-bd:    rgba(248,113,113,.4);
+}
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--ink);
+  color: var(--text);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+[x-cloak] { display: none !important; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e2d3d; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #263040; }
+
+/* ── Inputs ────────────────────────────────────────── */
+.inp {
+  width: 100%;
+  background: rgba(0,0,0,.4);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.inp::placeholder { color: #506278; }
+.inp:focus {
+  border-color: rgba(217,119,6,.5);
+  box-shadow: 0 0 0 3px rgba(217,119,6,.08);
+}
+
+/* ── Cards ─────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 20px;
+  transition: border-color .2s;
+}
+.card:hover { border-color: var(--bh); }
+
+/* ── Labels — Noto Serif SC for literary character ── */
+.lbl {
+  font-family: 'Noto Serif SC', 'Noto Serif CJK SC', serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 10px;
+}
+.sublbl { font-size: 11px; color: var(--dim); margin-bottom: 5px; }
+
+/* ── Buttons ────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  border: none;
+  flex-shrink: 0;
+}
+.btn-amber {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  color: #fff;
+  box-shadow: 0 2px 14px rgba(217,119,6,.22);
+  text-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.btn-amber:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 22px rgba(217,119,6,.32);
+  transform: translateY(-1px);
+}
+.btn-amber:active { transform: none; }
+.btn-amber:disabled {
+  background: #1e2d3d;
+  color: #2a3a50;
+  box-shadow: none;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+.btn-ghost {
+  background: rgba(255,255,255,.04);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover {
+  background: rgba(255,255,255,.07);
+  color: var(--text);
+  border-color: var(--bh);
+}
+
+/* ── Spinner ────────────────────────────────────────── */
+.spin {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255,255,255,.15);
+  border-top-color: rgba(255,255,255,.8);
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Status dot ─────────────────────────────────────── */
+.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot-ok   { background: #34d399; box-shadow: 0 0 7px rgba(52,211,153,.5); }
+.dot-err  { background: #f87171; box-shadow: 0 0 7px rgba(248,113,113,.5); }
+.dot-busy { background: #d97706; box-shadow: 0 0 7px rgba(217,119,6,.6);
+            animation: blink .8s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* ── Progress bar ───────────────────────────────────── */
+.prog-bar { height: 3px; border-radius: 99px; transition: width .4s ease; }
+.prog-run {
+  background: linear-gradient(90deg, #d97706, #f59e0b, #d97706);
+  background-size: 200% auto;
+  animation: shimmer 1.5s linear infinite;
+}
+.prog-done { background: #34d399; }
+.prog-err  { background: #f87171; }
+@keyframes shimmer { to { background-position: 200% center; } }
+
+/* ── Sidebar nav ────────────────────────────────────── */
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: all .15s;
+  border-right: 2px solid transparent;
+  color: #607888;
+  user-select: none;
+}
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.nav-active {
+  color: #d97706 !important;
+  background: rgba(217,119,6,.07) !important;
+  border-right-color: #d97706 !important;
+}
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 99px;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+}
+.badge-ok  { background: rgba(52,211,153,.12); color: #34d399; }
+.badge-err { background: rgba(248,113,113,.12); color: #f87171; }
+
+/* ── Tables ─────────────────────────────────────────── */
+.tbl-th {
+  padding: 10px 18px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: .04em;
+  text-align: left;
+}
+.tbl-td { padding: 9px 18px; border-top: 1px solid rgba(255,255,255,.04); }
+tr:hover td { background: rgba(255,255,255,.015); }
+
+/* ── Page enter ─────────────────────────────────────── */
+.page { animation: fadein .16s ease; }
+@keyframes fadein { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+/* ── Pills ──────────────────────────────────────────── */
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+.pill-ok  { background: rgba(52,211,153,.1); color: #34d399; }
+.pill-err { background: rgba(248,113,113,.1); color: #f87171; }
+
+/* ── Info box ───────────────────────────────────────── */
+.info-box {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: 9px;
+  background: rgba(217,119,6,.05);
+  border: 1px solid rgba(217,119,6,.12);
+}
+
+/* ── Light theme overrides ──────────────────────────── */
+[data-theme="light"] .inp {
+  background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12);
+}
+[data-theme="light"] .inp::placeholder { color: #a09585; }
+[data-theme="light"] .inp:focus {
+  border-color: rgba(180,83,9,.5);
+  box-shadow: 0 0 0 3px rgba(180,83,9,.08);
+}
+[data-theme="light"] .btn-ghost {
+  background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.1);
+}
+[data-theme="light"] .btn-ghost:hover {
+  background: rgba(0,0,0,.07); border-color: rgba(0,0,0,.18);
+}
+[data-theme="light"] .btn-amber {
+  background: linear-gradient(135deg,#b45309,#92400e);
+  box-shadow: 0 2px 14px rgba(180,83,9,.22);
+}
+[data-theme="light"] .btn-amber:hover { box-shadow: 0 4px 22px rgba(180,83,9,.32); }
+[data-theme="light"] .nav-item { color: #9a8b78; }
+[data-theme="light"] .nav-item:hover { background: rgba(0,0,0,.04); }
+[data-theme="light"] .nav-active {
+  color: #b45309 !important;
+  background: rgba(180,83,9,.08) !important;
+  border-right-color: #b45309 !important;
+}
+[data-theme="light"] .badge-ok  { background: rgba(52,211,153,.15); }
+[data-theme="light"] .badge-err { background: rgba(248,113,113,.15); }
+[data-theme="light"] .tbl-td { border-top-color: rgba(0,0,0,.06); }
+[data-theme="light"] tr:hover td { background: rgba(0,0,0,.02); }
+[data-theme="light"] .info-box {
+  background: rgba(180,83,9,.05); border-color: rgba(180,83,9,.14);
+}
+[data-theme="light"] .pill-ok  { background: rgba(52,211,153,.12); }
+[data-theme="light"] .pill-err { background: rgba(248,113,113,.12); }
+
+/* ── Toast theme-aware classes ──────────────────────── */
+.toast-ok  { background: var(--toast-ok-bg);  border: 1px solid var(--toast-ok-bd); }
+.toast-err { background: var(--toast-err-bg); border: 1px solid var(--toast-err-bd); }
+
+/* ── Log colors ─────────────────────────────────────── */
+.log-ok   { color: #34d399; }
+.log-err  { color: #f87171; }
+.log-warn { color: #d97706; }
+.log-info { color: #93c5fd; }
+[data-theme="light"] .log-info { color: #2563eb; }
+[data-theme="light"] .log-sep  { color: #d4cbbf; }
+[data-theme="light"] .log-dim  { color: #c8bfb0; }
+.log-sep  { color: #2e5070; }
+.log-dim  { color: #506278; }
+
+/* ── Cover picker modal ─────────────────────────────────── */
+.cov-card {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.cov-card:hover { border-color: var(--bh); }
+.cov-sel {
+  border-color: #d97706 !important;
+  box-shadow: 0 0 0 2px rgba(217,119,6,.3);
+  background: rgba(217,119,6,.05);
+}
+</style>
+<script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+
+<body class="dark"
+      style="display:flex; flex-direction:column; height:100vh; overflow:hidden;"
+      x-data="app()" x-init="init()" x-cloak>
+
+<!-- ══ Header ════════════════════════════════════════════════ -->
+<header style="flex-shrink:0; height:48px; display:flex; align-items:center; padding:0 20px;
+               gap:14px; background:var(--panel); border-bottom:1px solid var(--border);">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <div style="width:28px; height:28px; border-radius:7px; display:flex; align-items:center;
+                justify-content:center; font-size:15px;
+                background:linear-gradient(135deg,#d97706,#b45309);
+                box-shadow:0 2px 12px rgba(217,119,6,.3);">📚</div>
+    <span style="font-weight:600; color:var(--text); letter-spacing:-.01em;">TXT → EPUB</span>
+    <span style="font-size:10px; padding:2px 7px; border-radius:5px;
+                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.3</span>
+  </div>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+    <button @click="toggleTheme()"
+            :title="theme==='dark'?'切换到日间模式':'切换到夜间模式'"
+            style="background:none; border:none; cursor:pointer; font-size:16px;
+                   padding:4px 6px; border-radius:6px; transition:background .15s; line-height:1;"
+            onmouseover="this.style.background='rgba(128,128,128,.12)'"
+            onmouseout="this.style.background='none'"
+            x-text="theme==='dark'?'☀️':'🌙'"></button>
+    <div class="dot" :class="working?'dot-busy':statusOk?'dot-ok':'dot-err'"></div>
+    <span style="font-size:12px; color:var(--muted);" x-text="status"></span>
+  </div>
+</header>
+
+<!-- ══ Body ══════════════════════════════════════════════════ -->
+<div style="display:flex; flex:1; overflow:hidden;">
+
+  <!-- Sidebar -->
+  <aside style="flex-shrink:0; width:192px; background:var(--panel);
+                border-right:1px solid var(--border); padding:8px 0;">
+    <template x-for="item in navItems" :key="item.id">
+      <div class="nav-item" :class="page===item.id?'nav-active':''" @click="page=item.id">
+        <span style="font-size:15px; width:20px; text-align:center; flex-shrink:0;"
+              x-text="item.icon"></span>
+        <span x-text="item.label"></span>
+        <span x-show="item.badge" class="nav-badge"
+              :class="item.badgeOk?'badge-ok':'badge-err'"
+              x-text="item.badge"></span>
+      </div>
+    </template>
+  </aside>
+
+  <!-- Main -->
+  <main style="flex:1; overflow-y:auto; background:var(--ink);">
+
+    <!-- ── 单文件转换 ────────────────────────────────── -->
+    <div x-show="page==='convert'" class="page"
+         style="max-width:620px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">单文件转换</h1>
+        <p style="color:var(--muted);">将 TXT 转为 EPUB-ready 格式，标准化章节标题、合并段落</p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">文件路径</span>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="convertPath"
+                 placeholder="/Users/…/novel.txt" @change="onConvertFileChange()">
+          <button class="btn btn-ghost" @click="browseFile('convert')">浏览</button>
+          <button x-show="convertPath" class="btn btn-ghost" @click="openFile(convertPath)">打开</button>
+        </div>
+        <div x-show="recentFiles.length"
+             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span style="font-size:11px; color:var(--dim);">最近:</span>
+          <template x-for="f in recentFiles.slice(0,5)" :key="f">
+            <button @click="convertPath=f; onConvertFileChange()"
+                    style="font-size:11px; color:#d97706; background:none; border:none;
+                           cursor:pointer; padding:0; max-width:160px; overflow:hidden;
+                           text-overflow:ellipsis; white-space:nowrap;
+                           transition:color .15s; font-family:inherit;"
+                    onmouseover="this.style.color='#f59e0b'"
+                    onmouseout="this.style.color='#d97706'"
+                    x-text="basename(f)"></button>
+          </template>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">书籍信息</span>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+              <div class="sublbl" style="margin:0;">书名</div>
+              <span x-show="convertMeta.title && !convertTitleEdited"
+                    style="font-size:10px; padding:1px 6px; border-radius:99px;
+                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
+            </div>
+            <input class="inp" type="text" x-model="convertTitle"
+                   placeholder="留空自动识别" @input="convertTitleEdited=true">
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+              <div class="sublbl" style="margin:0;">作者</div>
+              <span x-show="convertMeta.author && !convertAuthorEdited"
+                    style="font-size:10px; padding:1px 6px; border-radius:99px;
+                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
+            </div>
+            <input class="inp" type="text" x-model="convertAuthor"
+                   placeholder="留空自动识别" @input="convertAuthorEdited=true">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px;
+                      cursor:pointer; user-select:none; color:var(--muted);">
+          <input type="checkbox" x-model="convertShowCatalog"
+                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
+          转换后显示章节目录
+        </label>
+        <button class="btn btn-amber" style="margin-left:auto;"
+                @click="doConvert()" :disabled="convertWorking||!convertPath">
+          <span x-show="convertWorking" class="spin"></span>
+          <span x-text="convertWorking?'转换中…':'▶  开始转换'"></span>
+        </button>
+      </div>
+
+      <div x-show="convertMeta.name" class="card">
+        <span class="lbl">文件信息</span>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; text-align:center;">
+          <div>
+            <div style="font-size:12px; font-weight:600; color:#d97706;
+                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                 x-text="convertMeta.name"></div>
+            <div class="sublbl" style="margin-top:3px; text-align:center;">文件名</div>
+          </div>
+          <div>
+            <div style="font-size:22px; font-weight:700; color:#d97706; font-variant-numeric:tabular-nums;"
+                 x-text="convertMeta.size?formatSize(convertMeta.size):'—'"></div>
+            <div class="sublbl" style="margin-top:3px; text-align:center;">大小</div>
+          </div>
+          <div>
+            <div style="font-size:12px; font-weight:600; color:#34d399;
+                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                 x-text="convertMeta.title||'未识别'"></div>
+            <div class="sublbl" style="margin-top:3px; text-align:center;">识别书名</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 批量转换 ──────────────────────────────────── -->
+    <div x-show="page==='batch'" class="page"
+         style="max-width:620px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">批量转换</h1>
+        <p style="color:var(--muted);">批量转换文件夹内的所有 TXT 文件</p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">文件夹路径</span>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="batchDir" placeholder="/Users/…/novels/">
+          <button class="btn btn-ghost" @click="browseDir()">浏览</button>
+        </div>
+        <div x-show="recentDirs.length"
+             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span style="font-size:11px; color:var(--dim);">最近:</span>
+          <template x-for="d in recentDirs.slice(0,4)" :key="d">
+            <button @click="batchDir=d"
+                    style="font-size:11px; color:#d97706; background:none; border:none;
+                           cursor:pointer; padding:0; max-width:200px; overflow:hidden;
+                           text-overflow:ellipsis; white-space:nowrap;
+                           transition:color .15s; font-family:inherit;"
+                    onmouseover="this.style.color='#f59e0b'"
+                    onmouseout="this.style.color='#d97706'"
+                    x-text="basename(d)"></button>
+          </template>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+        <button class="btn btn-amber" @click="doBatch()" :disabled="batchWorking||!batchDir">
+          <span x-show="batchWorking" class="spin"></span>
+          <span x-text="batchWorking?'处理中…':'▶  批量转换'"></span>
+        </button>
+      </div>
+
+      <div x-show="batchResults.length" class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:12px 18px; border-bottom:1px solid var(--border);
+                    display:flex; align-items:center; justify-content:space-between;">
+          <span class="lbl" style="margin:0;">处理结果</span>
+          <span style="font-size:11px; color:var(--muted);"
+                x-text="`${batchResults.filter(r=>!r.error).length} / ${batchResults.length} 成功`"></span>
+        </div>
+        <table style="width:100%; border-collapse:collapse;">
+          <thead style="background:rgba(255,255,255,.02);">
+            <tr>
+              <th class="tbl-th">文件名</th>
+              <th class="tbl-th" style="text-align:center;">状态</th>
+              <th class="tbl-th" style="text-align:center;">章节</th>
+              <th class="tbl-th" style="text-align:right;">大小</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(r,i) in batchResults" :key="i">
+              <tr>
+                <td class="tbl-td" style="color:var(--text); max-width:240px;
+                           overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    x-text="r.filename||r.file||'—'"></td>
+                <td class="tbl-td" style="text-align:center;">
+                  <span :class="r.error?'pill-err':'pill-ok'" class="pill"
+                        x-text="r.error?'失败':'✓ 成功'"></span>
+                </td>
+                <td class="tbl-td" style="text-align:center; color:var(--muted);"
+                    x-text="r.chapters??'—'"></td>
+                <td class="tbl-td" style="text-align:right; color:var(--muted);"
+                    x-text="r.size?formatSize(r.size):'—'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── 生成 EPUB ──────────────────────────────────── -->
+    <div x-show="page==='epub'" class="page"
+         style="max-width:620px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">生成 EPUB</h1>
+        <p style="color:var(--muted);">原始 TXT 自动先转换再生成；含 _epub_ready 的文件直接生成</p>
+      </div>
+
+      <div class="info-box" style="margin-bottom:14px;">
+        <span style="color:#d97706; flex-shrink:0; margin-top:1px;">💡</span>
+        <p style="font-size:12px; color:rgba(217,119,6,.7); line-height:1.6;">
+          建议先在「单文件」或「批量」完成转换，再到此处生成 EPUB。
+          文件名含 <code style="color:#d97706; background:rgba(217,119,6,.1); padding:0 4px;
+          border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:11px;">_epub_ready</code>
+          的文件视为已转换，直接生成。
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">TXT 文件</span>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="epubPath"
+                 placeholder="/Users/…/novel_epub_ready.txt"
+                 @change="onEpubFileChange()">
+          <button class="btn btn-ghost" @click="browseFile('epub')">浏览</button>
+        </div>
+        <div x-show="recentFiles.length"
+             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span style="font-size:11px; color:var(--dim);">最近:</span>
+          <template x-for="f in recentFiles.slice(0,5)" :key="f">
+            <button @click="epubPath=f"
+                    style="font-size:11px; color:#d97706; background:none; border:none;
+                           cursor:pointer; padding:0; max-width:180px; overflow:hidden;
+                           text-overflow:ellipsis; white-space:nowrap;
+                           transition:color .15s; font-family:inherit;"
+                    onmouseover="this.style.color='#f59e0b'"
+                    onmouseout="this.style.color='#d97706'"
+                    x-text="basename(f)"></button>
+          </template>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">书籍信息</span>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+              <div class="sublbl" style="margin:0;">书名</div>
+              <span x-show="epubMeta.title && !epubTitleEdited"
+                    style="font-size:10px; padding:1px 6px; border-radius:99px;
+                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
+            </div>
+            <input class="inp" type="text" x-model="epubTitle"
+                   placeholder="留空自动识别" @input="epubTitleEdited=true">
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+              <div class="sublbl" style="margin:0;">作者</div>
+              <span x-show="epubMeta.author && !epubAuthorEdited"
+                    style="font-size:10px; padding:1px 6px; border-radius:99px;
+                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
+            </div>
+            <input class="inp" type="text" x-model="epubAuthor"
+                   placeholder="留空自动识别" @input="epubAuthorEdited=true">
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <span class="lbl">封面选项</span>
+        <div style="display:flex; flex-wrap:wrap; gap:18px; margin-bottom:12px;">
+          <template x-for="opt in coverOptions" :key="opt.value">
+            <label style="display:flex; align-items:center; gap:7px;
+                          cursor:pointer; user-select:none; color:var(--muted);">
+              <input type="radio" :value="opt.value" x-model="epubCoverChoice"
+                     style="accent-color:#d97706; cursor:pointer;">
+              <span x-text="opt.label"></span>
+            </label>
+          </template>
+        </div>
+        <div x-show="epubCoverChoice==='local'" style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="epubCoverPath"
+                 placeholder="图片路径 (.jpg / .png / .webp)">
+          <button class="btn btn-ghost" @click="browseCover()">浏览</button>
+        </div>
+        <div x-show="epubCoverChoice==='url'">
+          <input class="inp" type="text" x-model="epubCoverUrl" placeholder="https://…">
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="btn btn-amber" @click="doEpub()"
+                :disabled="epubWorking||coverSearching||!epubPath">
+          <span x-show="epubWorking||coverSearching" class="spin"></span>
+          <span x-text="coverSearching?'搜索封面…':epubWorking?'生成中…':'🚀  一键生成 EPUB'"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── 目录查看 ───────────────────────────────────── -->
+    <div x-show="page==='catalog'" class="page"
+         style="max-width:740px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">目录查看</h1>
+        <p style="color:var(--muted);">分析 TXT 文件的章节结构</p>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <span class="lbl">TXT 文件</span>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="catalogPath"
+                 placeholder="/Users/…/novel.txt" @keydown.enter="doLoadCatalog()">
+          <button class="btn btn-ghost" @click="browseFile('catalog')">浏览</button>
+          <button class="btn btn-amber" @click="doLoadCatalog()"
+                  :disabled="catalogWorking||!catalogPath">
+            <span x-show="catalogWorking" class="spin"></span>
+            <span x-text="catalogWorking?'加载中…':'加载'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="catalogStats.total_chapters>0"
+           style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px;">
+        <div class="card" style="text-align:center; padding:20px 16px;">
+          <div style="font-size:32px; font-weight:700; color:#d97706;
+                      font-variant-numeric:tabular-nums; line-height:1;"
+               x-text="catalogStats.total_chapters"></div>
+          <div class="sublbl" style="margin-top:6px; text-align:center;
+                      text-transform:uppercase; letter-spacing:.08em;">章节数</div>
+        </div>
+        <div class="card" style="text-align:center; padding:20px 16px;">
+          <div style="font-size:32px; font-weight:700; color:#d97706;
+                      font-variant-numeric:tabular-nums; line-height:1;"
+               x-text="(catalogStats.total_lines||0).toLocaleString()"></div>
+          <div class="sublbl" style="margin-top:6px; text-align:center;
+                      text-transform:uppercase; letter-spacing:.08em;">总行数</div>
+        </div>
+        <div class="card" style="text-align:center; padding:20px 16px;">
+          <div style="font-size:32px; font-weight:700; color:#d97706;
+                      font-variant-numeric:tabular-nums; line-height:1;"
+               x-text="(catalogStats.total_chars||0).toLocaleString()"></div>
+          <div class="sublbl" style="margin-top:6px; text-align:center;
+                      text-transform:uppercase; letter-spacing:.08em;">总字数</div>
+        </div>
+      </div>
+
+      <div x-show="catalogChapters.length" class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:12px 18px; border-bottom:1px solid var(--border);
+                    display:flex; align-items:center; justify-content:space-between;">
+          <span class="lbl" style="margin:0;">章节目录</span>
+          <span style="font-size:11px; color:var(--muted);"
+                x-text="`共 ${catalogChapters.length} 章`"></span>
+        </div>
+        <div style="max-height:460px; overflow-y:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead style="position:sticky; top:0; background:var(--card);">
+              <tr style="background:rgba(255,255,255,.02);">
+                <th class="tbl-th" style="width:56px;">#</th>
+                <th class="tbl-th">标题</th>
+                <th class="tbl-th" style="text-align:right; width:100px;">字数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(ch,i) in catalogChapters" :key="i">
+                <tr>
+                  <td class="tbl-td" style="font-family:'JetBrains Mono',monospace; font-size:11px;
+                             color:var(--dim); width:56px;" x-text="ch.number"></td>
+                  <td class="tbl-td" style="color:var(--text);" x-text="ch.title"></td>
+                  <td class="tbl-td" style="text-align:right; color:var(--muted);
+                             font-variant-numeric:tabular-nums;
+                             font-family:'JetBrains Mono',monospace; font-size:11px;"
+                      x-text="(ch.char_count||0).toLocaleString()"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══ Status bar ════════════════════════════════════════════ -->
+<div style="flex-shrink:0; height:36px; display:flex; align-items:center; gap:10px;
+            padding:0 14px; background:var(--panel); border-top:1px solid var(--border);
+            font-size:11px;">
+  <div style="width:72px; height:3px; background:rgba(255,255,255,.05); border-radius:99px;
+              flex-shrink:0; overflow:hidden;">
+    <div class="prog-bar"
+         :class="progressErr?'prog-err':working?'prog-run':'prog-done'"
+         :style="`width:${progress}%`"></div>
+  </div>
+  <span style="color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;"
+        x-text="outputPath?dirOf(outputPath):'暂无输出文件'"></span>
+  <span x-show="outputPath"
+        style="color:#d97706; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+               max-width:220px; flex-shrink:0;"
+        x-text="'/ '+basename(outputPath)"></span>
+  <template x-if="outputPath">
+    <div style="display:flex; gap:2px; flex-shrink:0;">
+      <button @click="openFile(outputPath)"
+              style="padding:3px 8px; border-radius:5px; background:none; border:none;
+                     cursor:pointer; color:var(--muted); transition:all .15s;
+                     font-family:inherit; font-size:11px;"
+              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">打开</button>
+      <button @click="openInFinder(outputPath)"
+              style="padding:3px 8px; border-radius:5px; background:none; border:none;
+                     cursor:pointer; color:var(--muted); transition:all .15s;
+                     font-family:inherit; font-size:11px;"
+              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">Finder</button>
+    </div>
+  </template>
+  <button @click="logVisible=!logVisible"
+          style="display:flex; align-items:center; gap:4px; padding:3px 8px; border-radius:5px;
+                 background:none; border:none; cursor:pointer; color:var(--dim);
+                 transition:color .15s; font-family:inherit; font-size:11px; flex-shrink:0;"
+          onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">
+    <span>日志</span>
+    <span style="font-size:9px;" x-text="logVisible?'▲':'▼'"></span>
+  </button>
+</div>
+
+<!-- ══ Log panel ═════════════════════════════════════════════ -->
+<div x-show="logVisible" id="log-panel"
+     style="flex-shrink:0; height:160px; background:var(--log-bg);
+            border-top:1px solid rgba(255,255,255,.03); overflow-y:auto;">
+  <div style="padding:10px 14px; font-family:'JetBrains Mono',monospace;
+              font-size:11px; line-height:1.75;">
+    <div x-show="!logs.length"
+         style="font-style:italic; text-align:center; padding:24px 0; color:var(--log-empty);">
+      日志为空
+    </div>
+    <template x-for="(line,i) in logs" :key="i">
+      <div x-text="line" style="white-space:pre-wrap; word-break:break-all;"
+           :class="{
+             'log-ok':   /^[✅✓]/.test(line),
+             'log-err':  /^[❌✗]/.test(line),
+             'log-warn': /^⚠/.test(line),
+             'log-info': /^[🔍📝🚀📖🌐📦📚🔄]/.test(line),
+             'log-sep':  line.startsWith('=')||line.startsWith('-'),
+             'log-dim':  !/^[✅✓❌✗⚠🔍📝🚀📖🌐📦📚🔄]/.test(line)&&!line.startsWith('=')&&!line.startsWith('-'),
+           }"></div>
+    </template>
+  </div>
+</div>
+
+<!-- ══ Cover Picker Modal ════════════════════════════════════ -->
+<div x-show="coverPickerVisible" x-cloak
+     style="position:fixed; inset:0; z-index:200; display:flex; align-items:center;
+            justify-content:center; background:rgba(0,0,0,.75); backdrop-filter:blur(4px);"
+     @keydown.escape.window="cancelCover()">
+  <div style="background:var(--card); border:1px solid var(--border); border-radius:14px;
+              width:min(700px,95vw); max-height:82vh; display:flex; flex-direction:column;
+              box-shadow:0 24px 80px rgba(0,0,0,.7);">
+
+    <!-- header -->
+    <div style="padding:18px 20px 14px; border-bottom:1px solid var(--border);
+                display:flex; align-items:flex-start; justify-content:space-between; flex-shrink:0;">
+      <div>
+        <h2 style="font-family:'Noto Serif SC',serif; font-size:15px; font-weight:500;
+                   color:var(--text);">选择封面</h2>
+        <p x-show="coverSearching"
+           style="font-size:11px; color:var(--muted); margin-top:3px;">正在从晋江、豆瓣等平台搜索…</p>
+        <p x-show="!coverSearching && coverCandidates.length"
+           style="font-size:11px; color:var(--muted); margin-top:3px;"
+           x-text="`找到 ${coverCandidates.length} 个候选，点击选择后确认`"></p>
+        <p x-show="!coverSearching && !coverCandidates.length"
+           style="font-size:11px; color:var(--muted); margin-top:3px;">未找到匹配封面</p>
+      </div>
+      <button @click="cancelCover()"
+              style="background:none; border:none; cursor:pointer; color:var(--dim);
+                     font-size:22px; line-height:1; padding:0 4px; transition:color .15s;"
+              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">×</button>
+    </div>
+
+    <!-- body -->
+    <div style="flex:1; overflow-y:auto; padding:16px 20px;">
+      <!-- loading -->
+      <div x-show="coverSearching"
+           style="display:flex; flex-direction:column; align-items:center; padding:48px 0; gap:14px;">
+        <div style="width:28px; height:28px; border:3px solid rgba(255,255,255,.08);
+                    border-top-color:#d97706; border-radius:50%;
+                    animation:spin .65s linear infinite;"></div>
+        <span style="font-size:12px; color:var(--muted);">搜索中…</span>
+      </div>
+      <!-- grid -->
+      <div x-show="!coverSearching"
+           style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+        <template x-for="(c,i) in coverCandidates" :key="i">
+          <div class="cov-card" :class="coverSelected===i?'cov-sel':''" @click="coverSelected=i">
+            <!-- portrait image -->
+            <div style="width:100%; aspect-ratio:3/4; border-radius:6px; overflow:hidden;
+                        background:rgba(255,255,255,.04); position:relative; flex-shrink:0;">
+              <img :src="`/api/cover-proxy?url=${encodeURIComponent(c.image_url)}&referer=${encodeURIComponent(c.referer||'')}`"
+                   style="width:100%; height:100%; object-fit:cover; display:block;"
+                   loading="lazy"
+                   @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'">
+              <div style="display:none; position:absolute; inset:0; align-items:center;
+                          justify-content:center; color:var(--dim); font-size:11px;">无图</div>
+            </div>
+            <!-- meta -->
+            <div style="width:100%; text-align:center; min-width:0;">
+              <div style="font-size:11px; font-weight:600; color:var(--text);
+                          overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                   x-text="c.book_title||'—'"></div>
+              <div style="font-size:10px; color:var(--muted); overflow:hidden;
+                          text-overflow:ellipsis; white-space:nowrap; margin-top:1px;"
+                   x-text="c.author||''"></div>
+              <div style="display:flex; align-items:center; justify-content:center;
+                          gap:4px; margin-top:5px; flex-wrap:wrap;">
+                <span style="font-size:9px; padding:1px 5px; border-radius:99px;
+                             background:rgba(255,255,255,.05); color:var(--muted);"
+                      x-text="c.source_name"></span>
+                <span style="font-size:9px; padding:1px 5px; border-radius:99px;"
+                      :style="c.confidence>=0.8
+                        ? 'background:rgba(52,211,153,.1);color:#34d399;'
+                        : c.confidence>=0.5
+                          ? 'background:rgba(217,119,6,.1);color:#d97706;'
+                          : 'background:rgba(255,255,255,.04);color:var(--dim);'"
+                      x-text="Math.round(c.confidence*100)+'%'"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- footer -->
+    <div style="padding:14px 20px; border-top:1px solid var(--border); flex-shrink:0;
+                display:flex; align-items:center; gap:8px;">
+      <button class="btn btn-ghost" @click="cancelCover()"
+              style="font-size:12px; padding:6px 14px;">取消</button>
+      <button class="btn btn-ghost" @click="skipCover()"
+              style="font-size:12px; padding:6px 14px;">跳过封面</button>
+      <button class="btn btn-amber" style="margin-left:auto; font-size:12px; padding:6px 18px;"
+              @click="confirmCover()" :disabled="coverSelected===null || coverSearching">
+        ✓ 确认使用
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Toast notifications ═══════════════════════════════════ -->
+<div style="position:fixed; bottom:56px; right:14px; z-index:100; pointer-events:none;
+            display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+  <template x-for="t in toasts" :key="t.id">
+    <div x-show="t.visible"
+         x-transition:enter="transition ease-out duration-250"
+         x-transition:enter-start="opacity-0 translate-x-3"
+         x-transition:enter-end="opacity-100 translate-x-0"
+         x-transition:leave="transition ease-in duration-180"
+         x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+         :class="t.ok ? 'toast-ok' : 'toast-err'"
+         style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px;
+                border-radius:10px; max-width:300px; pointer-events:auto;
+                backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,.6);">
+      <span x-text="t.ok?'✅':'❌'" style="flex-shrink:0; margin-top:1px;"></span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:13px; font-weight:600; color:var(--text);" x-text="t.title"></div>
+        <div style="font-size:11px; color:var(--muted); margin-top:2px;
+                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+             x-text="t.msg"></div>
+      </div>
+      <button @click="t.visible=false"
+              style="background:none; border:none; cursor:pointer; color:var(--dim);
+                     font-size:16px; line-height:1; padding:0; flex-shrink:0;
+                     transition:color .15s;"
+              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">×</button>
+    </div>
+  </template>
+</div>
+
+<!-- ══ Alpine app ════════════════════════════════════════════ -->
+<script>
+function app() {
+  return {
+    page: 'convert',
+    navItems: [
+      { id:'convert', icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
+      { id:'batch',   icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
+      { id:'epub',    icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
+      { id:'catalog', icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
+    ],
+    convertPath:'', convertTitle:'', convertAuthor:'',
+    convertShowCatalog:true, convertWorking:false, convertMeta:{},
+    convertTitleEdited:false, convertAuthorEdited:false,
+    batchDir:'', batchWorking:false, batchResults:[],
+    epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
+    epubTitleEdited:false, epubAuthorEdited:false,
+    epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false,
+    coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
+    _epubResolve:null,
+    coverOptions:[
+      { value:'none',  label:'无封面' },
+      { value:'local', label:'本地图片' },
+      { value:'url',   label:'图片 URL' },
+      { value:'auto',  label:'自动搜索' },
+    ],
+    catalogPath:'', catalogChapters:[], catalogStats:{}, catalogWorking:false,
+    logs:[], logVisible:true,
+    outputPath:'', progress:0, progressErr:false,
+    status:'就绪', statusOk:true, working:false,
+    recentFiles:[], recentDirs:[],
+    toasts:[], _tid:0,
+    theme: localStorage.getItem('theme')||'dark',
+
+    init() {
+      document.body.setAttribute('data-theme', this.theme)
+      this.loadRecent(); this.startLogs()
+    },
+
+    toggleTheme() {
+      this.theme = this.theme==='dark' ? 'light' : 'dark'
+      localStorage.setItem('theme', this.theme)
+      document.body.setAttribute('data-theme', this.theme)
+    },
+
+    async loadRecent() {
+      const r = await fetch('/api/recent').then(r=>r.json()).catch(()=>({}))
+      this.recentFiles = r.files||[]; this.recentDirs = r.dirs||[]
+    },
+
+    startLogs() {
+      const es = new EventSource('/api/logs/stream')
+      es.onmessage = e => {
+        this.logs.push(JSON.parse(e.data))
+        if (this.logs.length > 800) this.logs.splice(0, 200)
+        this.$nextTick(() => {
+          const p = document.getElementById('log-panel')
+          if (p) p.scrollTop = p.scrollHeight
+        })
+      }
+      es.onerror = () => { es.close(); setTimeout(()=>this.startLogs(), 3000) }
+    },
+
+    toast(title, msg, ok=true) {
+      const id = ++this._tid
+      this.toasts.push({ id, title, msg, ok, visible:true })
+      setTimeout(() => {
+        const t = this.toasts.find(t=>t.id===id); if (t) t.visible = false
+        setTimeout(() => { this.toasts = this.toasts.filter(t=>t.id!==id) }, 300)
+      }, 4000)
+    },
+
+    basename(p) { return (p||'').replace(/\\/g,'/').split('/').pop()||'' },
+    dirOf(p) {
+      const pts = (p||'').replace(/\\/g,'/').split('/')
+      return pts.slice(0,-1).slice(-2).join('/')
+    },
+    formatSize(b) {
+      if (b>=1048576) return (b/1048576).toFixed(1)+' MB'
+      if (b>=1024) return Math.round(b/1024)+' KB'
+      return b+' B'
+    },
+    setStatus(t, ok=true) { this.status=t; this.statusOk=ok },
+
+    async post(url, body) {
+      const r = await fetch(url, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) { const e=await r.json().catch(()=>({})); throw new Error(e.detail||`HTTP ${r.status}`) }
+      return r.json()
+    },
+
+    async browseFile(target) {
+      const r = await this.post('/api/dialog', { mode:'file', title:'选择 TXT 文件' })
+      if (!r.path) return
+      if (target==='convert') { this.convertPath=r.path; await this.onConvertFileChange() }
+      if (target==='epub')    { this.epubPath=r.path;    await this.onEpubFileChange() }
+      if (target==='catalog') this.catalogPath=r.path
+    },
+    async browseDir() {
+      const r = await this.post('/api/dialog', { mode:'dir', title:'选择文件夹' })
+      if (r.path) this.batchDir=r.path
+    },
+    async browseCover() {
+      const r = await this.post('/api/dialog', { mode:'file', title:'选择封面图片' })
+      if (r.path) this.epubCoverPath=r.path
+    },
+
+    async onConvertFileChange() {
+      if (!this.convertPath) return
+      this.convertTitleEdited=false; this.convertAuthorEdited=false
+      try {
+        const r = await this.post('/api/extract-meta', { path:this.convertPath })
+        if (r.title)  this.convertTitle  = r.title
+        if (r.author) this.convertAuthor = r.author
+        this.convertMeta = r
+      } catch(_) { this.convertMeta = {} }
+    },
+
+    async onEpubFileChange() {
+      if (!this.epubPath) return
+      this.epubTitleEdited=false; this.epubAuthorEdited=false
+      try {
+        const r = await this.post('/api/extract-meta', { path:this.epubPath })
+        if (r.title)  this.epubTitle  = r.title
+        if (r.author) this.epubAuthor = r.author
+        this.epubMeta = r
+      } catch(_) { this.epubMeta = {} }
+    },
+
+    async doConvert() {
+      if (!this.convertPath||this.convertWorking) return
+      this.convertWorking=true; this.working=true
+      this.progress=8; this.progressErr=false; this.setStatus('转换中…')
+      try {
+        const r = await this.post('/api/convert', {
+          path:this.convertPath, title:this.convertTitle, author:this.convertAuthor,
+        })
+        this.outputPath=r.output_file; this.progress=100; this.setStatus('转换完成')
+        this.navItems[0].badge='✓'; this.navItems[0].badgeOk=true
+        this.toast('转换完成', this.basename(r.output_file||''))
+        await this.loadRecent()
+      } catch(e) {
+        this.progressErr=true; this.progress=0; this.setStatus('转换失败', false)
+        this.navItems[0].badge='✗'; this.navItems[0].badgeOk=false
+        this.toast('转换失败', e.message, false)
+      }
+      this.convertWorking=false; this.working=false
+    },
+
+    async doBatch() {
+      if (!this.batchDir||this.batchWorking) return
+      this.batchWorking=true; this.working=true; this.batchResults=[]
+      this.progress=8; this.progressErr=false; this.setStatus('批量处理中…')
+      try {
+        const r = await this.post('/api/batch', { dir_path:this.batchDir })
+        this.batchResults = r.results||[]
+        const ok = this.batchResults.filter(x=>!x.error).length
+        this.progress=100; this.setStatus(`完成 ${ok}/${this.batchResults.length}`)
+        this.navItems[1].badge=`${ok}✓`; this.navItems[1].badgeOk=ok>0
+        if (this.batchResults[0]?.output_file) this.outputPath=this.batchResults[0].output_file
+        this.toast(`批量完成 ${ok}/${this.batchResults.length}`, `${ok} 个文件成功`, ok>0)
+        await this.loadRecent()
+      } catch(e) {
+        this.progressErr=true; this.progress=0; this.setStatus('批量失败', false)
+        this.navItems[1].badge='✗'; this.navItems[1].badgeOk=false
+        this.toast('批量失败', e.message, false)
+      }
+      this.batchWorking=false; this.working=false
+    },
+
+    async doEpub() {
+      if (!this.epubPath || this.epubWorking || this.coverSearching) return
+
+      if (this.epubCoverChoice === 'auto') {
+        const title = this.epubTitle || ''
+        if (!title) { this.toast('需要书名', '请填写书名以搜索封面', false); return }
+        this.coverCandidates = []; this.coverSelected = null
+        this.coverSearching = true; this.coverPickerVisible = true
+        this.setStatus('搜索封面中…')
+        try {
+          const r = await this.post('/api/epub/search-covers',
+                                    { title, author: this.epubAuthor || '' })
+          this.coverCandidates = r.candidates || []
+        } catch(e) {
+          this.coverCandidates = []
+        }
+        this.coverSearching = false
+        const choice = await new Promise(resolve => { this._epubResolve = resolve })
+        this.coverPickerVisible = false
+        if (choice === 'cancel') { this.setStatus('已取消'); return }
+        await this._generateEpub('', choice === 'skip' ? '' : choice)
+        return
+      }
+
+      await this._generateEpub(
+        this.epubCoverChoice === 'local' ? this.epubCoverPath : '',
+        this.epubCoverChoice === 'url'   ? this.epubCoverUrl  : ''
+      )
+    },
+
+    async _generateEpub(coverImage, coverUrl) {
+      this.epubWorking=true; this.working=true
+      this.progress=8; this.progressErr=false; this.setStatus('生成 EPUB 中…')
+      try {
+        const r = await this.post('/api/epub', {
+          path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
+          cover_image: coverImage||'', cover_url: coverUrl||'', auto_search_cover:false,
+        })
+        this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
+        this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true
+        this.toast('EPUB 生成完成', this.basename(r.epub_path||''))
+      } catch(e) {
+        this.progressErr=true; this.progress=0; this.setStatus('生成失败', false)
+        this.navItems[2].badge='✗'; this.navItems[2].badgeOk=false
+        this.toast('EPUB 生成失败', e.message, false)
+      }
+      this.epubWorking=false; this.working=false
+    },
+
+    confirmCover() {
+      const c = this.coverSelected !== null ? this.coverCandidates[this.coverSelected] : null
+      if (this._epubResolve) this._epubResolve(c ? c.image_url : 'skip')
+      this._epubResolve = null
+    },
+    skipCover() {
+      if (this._epubResolve) this._epubResolve('skip')
+      this._epubResolve = null
+    },
+    cancelCover() {
+      if (this._epubResolve) this._epubResolve('cancel')
+      this._epubResolve = null
+    },
+
+    async doLoadCatalog() {
+      if (!this.catalogPath||this.catalogWorking) return
+      this.catalogWorking=true; this.catalogChapters=[]; this.catalogStats={}
+      this.setStatus('加载章节中…')
+      try {
+        const r = await this.post('/api/catalog/analyze', { path:this.catalogPath })
+        this.catalogChapters = r.chapters||[]
+        this.catalogStats = {
+          total_chapters: r.total_chapters,
+          total_lines:    r.total_lines,
+          total_chars:    r.total_chars,
+        }
+        this.setStatus('就绪')
+        this.navItems[3].badge=String(r.total_chapters||0); this.navItems[3].badgeOk=true
+      } catch(e) { this.setStatus('加载失败', false); this.toast('加载失败', e.message, false) }
+      this.catalogWorking=false
+    },
+
+    async openFile(p) {
+      if (p) await fetch('/api/open-file', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ path:p }),
+      }).catch(()=>{})
+    },
+    async openInFinder(p) {
+      if (p) await fetch('/api/open-in-finder', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ path:p }),
+      }).catch(()=>{})
+    },
+  }
+}
+</script>
+</body>
+</html>
