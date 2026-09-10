@@ -71,6 +71,12 @@ class ChapterAnalyzer:
             raw = chapter_match.group(num_grp)
             chapter_num = ChapterAnalyzer.normalize_chapter_num(raw) if normalize else int(raw)
             title_part = chapter_match.group(title_grp).strip() if title_grp else ""
+            # 标题以句号结尾，或以叹号/问号结尾且较长 → 疑似正文混入标题行
+            if title_part and (
+                title_part[-1] == '。'
+                or (title_part[-1] in '！？' and len(title_part) >= 8)
+            ):
+                title_part = ""
             unit_str = f"第{chapter_num}{unit}"
             return chapter_num, f"{unit_str} {title_part}" if title_part else unit_str
 

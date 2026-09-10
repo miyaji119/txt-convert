@@ -26,10 +26,11 @@ class AdFilter:
     _HARD_KW = [
         '下载app', '下载APP', 'APP下载', 'app下载',
         '手机用户请', '最新章节请访问', '最新章节请到', '最新更新地址',
-        'txt全集', '电子书下载', '本书来自', '首发于',
+        'txt全集', '电子书下载', '本书来自', '本作品来自', '首发于',
         '扫码', '二维码', 'qq群', 'QQ群', '公众号', '关注微信', '微信扫',
         '阅读网', '小说网', '全文阅读', '免费全文', '书城',
         '关注.*获取', '加入书架',
+        '内容版权归', '不做任何负责', '免费日更',
     ]
 
     _SOFT_KW = ['书友', '更新最快', '收藏推荐', '关注', '手机看书', '下载']
@@ -107,11 +108,26 @@ class AdFilter:
         if run_start is not None and (n - run_start) >= 3:
             removed.update(range(run_start, n))
 
-        # 保留章节标题行（防止误删）
-        _CHAPTER_RE = re.compile(r'^第[零一二三四五六七八九十百千万\d]+[章卷节回]')
+        # 保留章节标题行（防止误删）；若标题部分含广告则原地清除
+        _CHAPTER_TITLE_RE = re.compile(
+            r'^(第[零一二三四五六七八九十百千万\d]+[章卷节回])\s*(.*?)$'
+        )
+        # 去除 CJK 字符间的空格（用于反混淆广告）
+        _CJK_SP_RE = re.compile(
+            r'(?<=[一-鿿])\s+(?=[一-鿿])'
+            r'|(?<=[A-Za-z0-9])\s+(?=[一-鿿])'
+            r'|(?<=[一-鿿])\s+(?=[A-Za-z0-9])'
+        )
         for i, line in enumerate(lines):
-            if _CHAPTER_RE.match(line.strip()):
-                removed.discard(i)
+            m = _CHAPTER_TITLE_RE.match(line.strip())
+            if not m:
+                continue
+            removed.discard(i)
+            title_part = m.group(2).strip()
+            if title_part:
+                deobs = _CJK_SP_RE.sub('', title_part)
+                if cls._score(deobs) >= threshold or len(deobs) > 30:
+                    lines[i] = m.group(1)  # 只保留章节号，去掉广告标题
 
         filtered = [line for i, line in enumerate(lines) if i not in removed]
 

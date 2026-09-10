@@ -10,20 +10,27 @@ from typing import Dict, List, Optional, Set, Tuple
 
 class ConsistencyChecker:
 
-    # 人名：动作动词前缀
+    # 人名：动作动词前缀（中文姓名 2-3 字，不抓更长的句子片段）
     _ACTION_RE = re.compile(
-        r'([一-龥]{1,6})'
+        r'([一-龥]{2,3})'
         r'[的地]?'
         r'(?:说道?|问道?|答道?|道|叫道?|喊道?|笑道?|怒道?|低声道?'
         r'|沉声道?|冷道?|轻声道?|哼道?|叹道?|嗤道?)',
     )
     # 人名：引号/冒号前缀
-    _QUOTE_RE = re.compile(r'([一-龥]{1,6})[：:「『""]\s*[一-龥]')
+    _QUOTE_RE = re.compile(r'([一-龥]{2,3})[：:「『""]\s*[一-龥]')
 
-    # 地名：常见地点后缀
+    # 地名：常见地点后缀（排除「道」避免误抓对话动词）
     _PLACE_RE = re.compile(
         r'([一-龥]{1,4}'
-        r'(?:城|国|山|河|殿|宫|门|村|镇|县|府|道|阁|岛|峰|谷|林|原|界|域|洞|湖|海|宗|派|门|堂))',
+        r'(?:城|国|山|河|殿|宫|门|村|镇|县|府|阁|岛|峰|谷|林|原|界|域|洞|湖|海|宗|派|堂))',
+    )
+
+    # 以这些字开头的捕获结果不可能是人名/地名，直接过滤
+    _BAD_STARTS = frozenset(
+        '不没别非未也还又都而且但因和与或是为有在到从对向将让被把'
+        '他她它这那什么谁某各每几多少可真很更最已就才只也还都再'
+        '虽然虽然由于因此所以只是只有只要其实其中其他'
     )
 
     @classmethod
@@ -32,11 +39,11 @@ class ConsistencyChecker:
         for pat in (cls._ACTION_RE, cls._QUOTE_RE):
             for m in pat.finditer(text):
                 name = m.group(1).strip()
-                if len(name) >= 2:
+                if len(name) >= 2 and name[0] not in cls._BAD_STARTS:
                     entities.add(name)
         for m in cls._PLACE_RE.finditer(text):
             place = m.group(1).strip()
-            if len(place) >= 2:
+            if len(place) >= 2 and place[0] not in cls._BAD_STARTS:
                 entities.add(place)
         return entities
 
@@ -46,7 +53,7 @@ class ConsistencyChecker:
         content: str,
         chapter_structure: dict,
         window: int = 3,
-        confirm_n: int = 2,
+        confirm_n: int = 3,
         min_entities: int = 3,
     ) -> Optional[dict]:
         """检查章节间内容一致性。

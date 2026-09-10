@@ -122,7 +122,7 @@ async def log_stream():
         finally:
             _sse_connections -= 1
             if _sse_connections == 0:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 _shutdown_task = loop.create_task(_shutdown_if_idle())
 
     return StreamingResponse(
@@ -140,37 +140,27 @@ class DialogReq(BaseModel):
 
 def _pick_file(title: str) -> str:
     r = subprocess.run(
-        ["osascript", "-e", f'choose file with prompt "{title}"'],
+        ["osascript", "-e", f'POSIX path of (choose file with prompt "{title}")'],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
         return ""
-    alias = r.stdout.strip()
-    r2 = subprocess.run(
-        ["osascript", "-e", f'POSIX path of ("{alias}")'],
-        capture_output=True, text=True,
-    )
-    return r2.stdout.strip().rstrip("/")
+    return r.stdout.strip().rstrip("/")
 
 
 def _pick_dir(title: str) -> str:
     r = subprocess.run(
-        ["osascript", "-e", f'choose folder with prompt "{title}"'],
+        ["osascript", "-e", f'POSIX path of (choose folder with prompt "{title}")'],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
         return ""
-    alias = r.stdout.strip()
-    r2 = subprocess.run(
-        ["osascript", "-e", f'POSIX path of ("{alias}")'],
-        capture_output=True, text=True,
-    )
-    return r2.stdout.strip().rstrip("/")
+    return r.stdout.strip().rstrip("/")
 
 
 @app.post("/api/dialog")
 async def open_dialog(req: DialogReq):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if req.mode == "dir":
         path = await loop.run_in_executor(executor, lambda: _pick_dir(req.title))
     else:
@@ -193,7 +183,7 @@ class PathReq(BaseModel):
 async def extract_meta(req: PathReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -222,7 +212,7 @@ async def api_convert(req: ConvertReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
     config.add_recent_file(req.path)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _run():
         return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True)
@@ -248,7 +238,7 @@ async def api_batch(req: BatchReq):
     if not os.path.isdir(req.dir_path):
         raise HTTPException(404, "目录不存在")
     config.add_recent_dir(req.dir_path)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _run():
         return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True)
@@ -275,7 +265,7 @@ async def api_epub(req: EpubReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
     config.add_recent_file(req.path)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _run():
         cur = req.path
@@ -304,13 +294,69 @@ async def api_epub(req: EpubReq):
 async def api_catalog(req: PathReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
         return ChapterAnalyzer.analyze_chapter_structure(content)
 
     return await loop.run_in_executor(executor, _run)
+
+
+# ── 章节保存 ───────────────────────────────────────────────
+class SaveCatalogReq(BaseModel):
+    path: str
+    chapters: List[dict]
+    output_path: str = ""
+
+
+@app.post("/api/catalog/save")
+async def api_catalog_save(req: SaveCatalogReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+    if not req.chapters:
+        raise HTTPException(400, "章节列表为空")
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        lines = content.split('\n')
+        chapter_contents = []
+        for ch in req.chapters:
+            s = ch.get('content_start', ch.get('start_line', 0)) - 1
+            e = ch.get('content_end', ch.get('end_line', 0)) - 1
+            s = max(0, min(s, len(lines) - 1))
+            e = max(s, min(e, len(lines) - 1))
+            section = lines[s:e + 1]
+            if section:
+                import re as _re
+                new_title = ch['title']
+                stripped = section[0].lstrip()
+                if stripped and stripped[0] in '=*#':
+                    m = _re.match(r'^([=*#◇◆•·\s]+)', section[0])
+                    prefix = m.group(1) if m else ''
+                    section[0] = f"{prefix}{new_title}"
+                else:
+                    section[0] = new_title
+            chapter_contents.append('\n'.join(section))
+
+        first_start = max(0, req.chapters[0].get(
+            'content_start', req.chapters[0].get('start_line', 0)) - 1)
+        pre = '\n'.join(lines[:first_start])
+        parts = ([pre] if pre.strip() else []) + chapter_contents
+        output_text = '\n\n'.join(parts) + '\n'
+
+        out = req.output_path or (os.path.splitext(req.path)[0] + '_edited.txt')
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(output_text)
+        return out
+
+    try:
+        out = await loop.run_in_executor(executor, _run)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    config.add_recent_file(out)
+    return {"output_path": out}
 
 
 # ── Finder 集成 ────────────────────────────────────────────────
@@ -342,7 +388,7 @@ class SearchCoverReq(BaseModel):
 async def search_covers(req: SearchCoverReq):
     if not req.title.strip():
         raise HTTPException(400, "书名不能为空")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     candidates = await loop.run_in_executor(
         executor, lambda: search_cover_candidates(req.title, req.author)
     )
@@ -364,7 +410,7 @@ async def search_covers(req: SearchCoverReq):
 @app.get("/api/cover-proxy")
 async def cover_proxy(url: str, referer: str = ""):
     from cover import _http_get
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     raw, _ = await loop.run_in_executor(executor, lambda: _http_get(url, referer=referer, timeout=15))
     if not raw:
         raise HTTPException(404, "图片获取失败")
