@@ -2,5 +2,5 @@
 __pycache__/
 # Ignore Python bytecode files
 *.pyc
-
+# Ignore .DS_Store
 .DS_Store

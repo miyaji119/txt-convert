@@ -142,11 +142,7 @@ class EasyPubOptimizer:
         return optimized_text, {'total_chapters': total_chapters, 'chapters': chapters, 'total_lines': len(optimized_lines), 'total_chars': len(optimized_text)}
 
 
-<<<<<<< HEAD
-def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True, ignore_mismatch: bool = False) -> Tuple[Optional[str], Optional[Dict]]:
-=======
 def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True, ignore_mismatch: bool = False, filter_ads: bool = True, ad_rules: dict = None) -> Tuple[Optional[str], Optional[Dict]]:
->>>>>>> 977088b (add: ad filter)
     if output_file is None:
         base_name = os.path.splitext(input_file)[0]
         output_file = f"{base_name}_epub_ready.txt"
@@ -161,12 +157,6 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
         print(f"   ❌ 无法读取文件: {e}")
         return None, None
 
-<<<<<<< HEAD
-    content, ad_count = AdFilter.filter_content(content)
-    if ad_count:
-        print(f"   🧹 过滤广告行: {ad_count} 行")
-
-=======
     if filter_ads:
         _rules = ad_rules or {}
         content, ad_count = AdFilter.filter_content(
@@ -177,7 +167,6 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
         )
         if ad_count:
             print(f"   🧹 过滤广告行: {ad_count} 行")
->>>>>>> 977088b (add: ad filter)
     content, wm_count, wm_list = NameCleaner.clean(content)
     if wm_count:
         preview = '、'.join(wm_list[:5])

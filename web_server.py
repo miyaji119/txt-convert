@@ -205,10 +205,7 @@ class ConvertReq(BaseModel):
     path: str
     title: str = ""
     author: str = ""
-<<<<<<< HEAD
-=======
     filter_ads: bool = True
->>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/convert")
@@ -219,12 +216,8 @@ async def api_convert(req: ConvertReq):
     loop = asyncio.get_running_loop()
 
     def _run():
-<<<<<<< HEAD
-        return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True)
-=======
         return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True,
                                    filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
->>>>>>> 977088b (add: ad filter)
 
     try:
         out, analysis = await loop.run_in_executor(executor, _run)
@@ -240,10 +233,7 @@ async def api_convert(req: ConvertReq):
 # ── 批量转换 ───────────────────────────────────────────────────
 class BatchReq(BaseModel):
     dir_path: str
-<<<<<<< HEAD
-=======
     filter_ads: bool = True
->>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/batch")
@@ -254,12 +244,8 @@ async def api_batch(req: BatchReq):
     loop = asyncio.get_running_loop()
 
     def _run():
-<<<<<<< HEAD
-        return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True)
-=======
         return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True,
                                          filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
->>>>>>> 977088b (add: ad filter)
 
     try:
         results = await loop.run_in_executor(executor, _run)
@@ -276,10 +262,7 @@ class EpubReq(BaseModel):
     cover_image: str = ""
     cover_url: str = ""
     auto_search_cover: bool = False
-<<<<<<< HEAD
-=======
     filter_ads: bool = True
->>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/epub")
@@ -292,12 +275,8 @@ async def api_epub(req: EpubReq):
     def _run():
         cur = req.path
         if "_epub_ready" not in os.path.basename(cur):
-<<<<<<< HEAD
-            out, _ = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False)
-=======
             out, _ = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False,
                                          filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
->>>>>>> 977088b (add: ad filter)
             if not out:
                 raise RuntimeError("转换失败")
             cur = out
@@ -386,9 +365,7 @@ async def api_catalog_save(req: SaveCatalogReq):
     return {"output_path": out}
 
 
-<<<<<<< HEAD
-# ── Finder 集成 ────────────────────────────────────────────────
-=======
+
 # ── 广告过滤规则 ───────────────────────────────────────────────
 from adfilter import AdFilter as _AdFilter
 
@@ -449,9 +426,7 @@ async def save_adfilter_rules(req: AdFilterRulesReq):
     return {"ok": True, "file_path": AD_RULES_FILE}
 
 
-
->>>>>>> 977088b (add: ad filter)
-@app.post("/api/open-in-finder")
+# ── Finder 集成 ────────────────────────────────────────────────
 async def open_finder(req: PathReq):
     p = req.path
     if os.path.isfile(p):
