@@ -205,6 +205,10 @@ class ConvertReq(BaseModel):
     path: str
     title: str = ""
     author: str = ""
+<<<<<<< HEAD
+=======
+    filter_ads: bool = True
+>>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/convert")
@@ -215,7 +219,12 @@ async def api_convert(req: ConvertReq):
     loop = asyncio.get_running_loop()
 
     def _run():
+<<<<<<< HEAD
         return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True)
+=======
+        return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True,
+                                   filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
+>>>>>>> 977088b (add: ad filter)
 
     try:
         out, analysis = await loop.run_in_executor(executor, _run)
@@ -231,6 +240,10 @@ async def api_convert(req: ConvertReq):
 # ── 批量转换 ───────────────────────────────────────────────────
 class BatchReq(BaseModel):
     dir_path: str
+<<<<<<< HEAD
+=======
+    filter_ads: bool = True
+>>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/batch")
@@ -241,7 +254,12 @@ async def api_batch(req: BatchReq):
     loop = asyncio.get_running_loop()
 
     def _run():
+<<<<<<< HEAD
         return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True)
+=======
+        return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True,
+                                         filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
+>>>>>>> 977088b (add: ad filter)
 
     try:
         results = await loop.run_in_executor(executor, _run)
@@ -258,6 +276,10 @@ class EpubReq(BaseModel):
     cover_image: str = ""
     cover_url: str = ""
     auto_search_cover: bool = False
+<<<<<<< HEAD
+=======
+    filter_ads: bool = True
+>>>>>>> 977088b (add: ad filter)
 
 
 @app.post("/api/epub")
@@ -270,7 +292,12 @@ async def api_epub(req: EpubReq):
     def _run():
         cur = req.path
         if "_epub_ready" not in os.path.basename(cur):
+<<<<<<< HEAD
             out, _ = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False)
+=======
+            out, _ = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False,
+                                         filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
+>>>>>>> 977088b (add: ad filter)
             if not out:
                 raise RuntimeError("转换失败")
             cur = out
@@ -359,7 +386,71 @@ async def api_catalog_save(req: SaveCatalogReq):
     return {"output_path": out}
 
 
+<<<<<<< HEAD
 # ── Finder 集成 ────────────────────────────────────────────────
+=======
+# ── 广告过滤规则 ───────────────────────────────────────────────
+from adfilter import AdFilter as _AdFilter
+
+AD_RULES_FILE = os.path.join(os.path.expanduser('~'), '.txt2epub', 'adfilter_rules.json')
+
+
+def _load_ad_rules_file() -> dict:
+    """从独立规则文件读取，不存在时返回 None（调用方按默认处理）。"""
+    if not os.path.isfile(AD_RULES_FILE):
+        return {}
+    try:
+        with open(AD_RULES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _get_ad_rules() -> dict:
+    """返回当前广告过滤规则，用于传给 convert_for_easypub。"""
+    data = _load_ad_rules_file()
+    return {
+        'hard_kw':  data.get('hard_kw'),   # None → AdFilter 使用内置默认
+        'soft_kw':  data.get('soft_kw'),
+        'threshold': data.get('threshold', 0.68),
+    }
+
+
+@app.get("/api/adfilter/rules")
+async def get_adfilter_rules():
+    data = _load_ad_rules_file()
+    return {
+        "hard_kw":           data.get('hard_kw', _AdFilter._HARD_KW),
+        "soft_kw":           data.get('soft_kw', _AdFilter._SOFT_KW),
+        "threshold":         data.get('threshold', 0.68),
+        "default_hard_kw":   _AdFilter._HARD_KW,
+        "default_soft_kw":   _AdFilter._SOFT_KW,
+        "default_threshold": 0.68,
+        "file_path":         AD_RULES_FILE,
+    }
+
+
+class AdFilterRulesReq(BaseModel):
+    hard_kw: List[str]
+    soft_kw: List[str]
+    threshold: float = 0.68
+
+
+@app.post("/api/adfilter/rules")
+async def save_adfilter_rules(req: AdFilterRulesReq):
+    os.makedirs(os.path.dirname(AD_RULES_FILE), exist_ok=True)
+    data = {
+        "hard_kw":   req.hard_kw,
+        "soft_kw":   req.soft_kw,
+        "threshold": round(max(0.1, min(1.0, req.threshold)), 4),
+    }
+    with open(AD_RULES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "file_path": AD_RULES_FILE}
+
+
+
+>>>>>>> 977088b (add: ad filter)
 @app.post("/api/open-in-finder")
 async def open_finder(req: PathReq):
     p = req.path

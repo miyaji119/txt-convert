@@ -36,11 +36,22 @@ class AdFilter:
     _SOFT_KW = ['书友', '更新最快', '收藏推荐', '关注', '手机看书', '下载']
 
     @classmethod
+<<<<<<< HEAD
     def _score(cls, line: str, near_boundary: bool = False) -> float:
+=======
+    def _score(cls, line: str, near_boundary: bool = False,
+               hard_kw=None, soft_kw=None) -> float:
+>>>>>>> 977088b (add: ad filter)
         s = line.strip()
         if not s:
             return 0.0
 
+<<<<<<< HEAD
+=======
+        _hard = hard_kw if hard_kw is not None else cls._HARD_KW
+        _soft = soft_kw if soft_kw is not None else cls._SOFT_KW
+
+>>>>>>> 977088b (add: ad filter)
         score = 0.0
 
         if cls._URL_RE.search(s):
@@ -49,11 +60,19 @@ class AdFilter:
             score = max(score, 0.82)
 
         sl = s.lower()
+<<<<<<< HEAD
         for kw in cls._HARD_KW:
             if kw.lower() in sl:
                 score = max(score, 0.78)
                 break
         for kw in cls._SOFT_KW:
+=======
+        for kw in _hard:
+            if kw.lower() in sl:
+                score = max(score, 0.78)
+                break
+        for kw in _soft:
+>>>>>>> 977088b (add: ad filter)
             if kw in s:
                 score += 0.18
 
@@ -70,6 +89,11 @@ class AdFilter:
         content: str,
         threshold: float = 0.68,
         head_tail_lines: int = 30,
+<<<<<<< HEAD
+=======
+        hard_kw=None,
+        soft_kw=None,
+>>>>>>> 977088b (add: ad filter)
     ) -> Tuple[str, int]:
         """过滤广告内容。
 
@@ -77,6 +101,11 @@ class AdFilter:
             content: 原始文本
             threshold: 单行广告分阈值（0–1）
             head_tail_lines: 文件首尾各多少行视为「边界区域」加权
+<<<<<<< HEAD
+=======
+            hard_kw: 强匹配关键词列表（覆盖默认）
+            soft_kw: 软匹配关键词列表（覆盖默认）
+>>>>>>> 977088b (add: ad filter)
 
         Returns:
             (filtered_content, removed_line_count)
@@ -84,7 +113,13 @@ class AdFilter:
         lines = content.split('\n')
         n = len(lines)
         scores = [
+<<<<<<< HEAD
             cls._score(line, near_boundary=(i < head_tail_lines or i >= n - head_tail_lines))
+=======
+            cls._score(line,
+                       near_boundary=(i < head_tail_lines or i >= n - head_tail_lines),
+                       hard_kw=hard_kw, soft_kw=soft_kw)
+>>>>>>> 977088b (add: ad filter)
             for i, line in enumerate(lines)
         ]
 
@@ -126,7 +161,11 @@ class AdFilter:
             title_part = m.group(2).strip()
             if title_part:
                 deobs = _CJK_SP_RE.sub('', title_part)
+<<<<<<< HEAD
                 if cls._score(deobs) >= threshold or len(deobs) > 30:
+=======
+                if cls._score(deobs, hard_kw=hard_kw, soft_kw=soft_kw) >= threshold or len(deobs) > 30:
+>>>>>>> 977088b (add: ad filter)
                     lines[i] = m.group(1)  # 只保留章节号，去掉广告标题
 
         filtered = [line for i, line in enumerate(lines) if i not in removed]

@@ -422,6 +422,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
                  style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
           转换后显示章节目录
         </label>
+<<<<<<< HEAD
+=======
+        <label style="display:flex; align-items:center; gap:8px;
+                      cursor:pointer; user-select:none; color:var(--muted);">
+          <input type="checkbox" x-model="filterAds"
+                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
+          过滤广告行
+        </label>
+>>>>>>> 977088b (add: ad filter)
         <button class="btn btn-amber" style="margin-left:auto;"
                 @click="doConvert()" :disabled="convertWorking||!convertPath">
           <span x-show="convertWorking" class="spin"></span>
@@ -484,8 +493,19 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
+<<<<<<< HEAD
       <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
         <button class="btn btn-amber" @click="doBatch()" :disabled="batchWorking||!batchDir">
+=======
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px;
+                      cursor:pointer; user-select:none; color:var(--muted);">
+          <input type="checkbox" x-model="filterAds"
+                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
+          过滤广告行
+        </label>
+        <button class="btn btn-amber" style="margin-left:auto;" @click="doBatch()" :disabled="batchWorking||!batchDir">
+>>>>>>> 977088b (add: ad filter)
           <span x-show="batchWorking" class="spin"></span>
           <span x-text="batchWorking?'处理中…':'▶  批量转换'"></span>
         </button>
@@ -730,7 +750,17 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
+<<<<<<< HEAD
       <div style="display:flex; justify-content:flex-end;">
+=======
+      <div style="display:flex; align-items:center; gap:16px; justify-content:flex-end;">
+        <label style="display:flex; align-items:center; gap:8px;
+                      cursor:pointer; user-select:none; color:var(--muted);">
+          <input type="checkbox" x-model="filterAds"
+                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
+          过滤广告行
+        </label>
+>>>>>>> 977088b (add: ad filter)
         <button class="btn btn-amber" @click="doEpub()"
                 :disabled="epubWorking||coverSearching||!epubPath">
           <span x-show="epubWorking||coverSearching" class="spin"></span>
@@ -855,6 +885,127 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
     </div>
 
+<<<<<<< HEAD
+=======
+    <!-- ── 广告规则 ──────────────────────────────────── -->
+    <div x-show="page==='adfilter'" class="page"
+         style="max-width:640px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">广告过滤规则</h1>
+        <p style="color:var(--muted);">配置关键词列表与匹配分值阈值，设置全局生效</p>
+      </div>
+
+      <!-- 强匹配关键词 -->
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <span class="lbl" style="margin:0;">强匹配关键词</span>
+          <span class="sublbl" style="margin:0;">命中即视为广告（分值 ≥ 0.78）</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
+          <template x-for="(kw, i) in adHardKw" :key="i">
+            <div style="display:inline-flex; align-items:center; gap:3px;
+                        padding:3px 6px 3px 10px;
+                        background:rgba(217,119,6,.12); border:1px solid rgba(217,119,6,.3);
+                        border-radius:99px; font-size:12px; color:#d97706; max-width:220px;">
+              <span x-text="kw" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+              <button @click="adHardKw.splice(i,1); adRulesDirty=true"
+                      style="background:none; border:none; cursor:pointer; color:var(--muted);
+                             padding:0 2px; font-size:14px; line-height:1; flex-shrink:0;"
+                      title="删除">×</button>
+            </div>
+          </template>
+          <span x-show="adHardKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="adHardKwInput" placeholder="输入关键词后回车添加"
+                 @keydown.enter="addAdHardKw()" style="flex:1;">
+          <button class="btn btn-ghost" @click="addAdHardKw()">添加</button>
+        </div>
+      </div>
+
+      <!-- 软匹配关键词 -->
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <span class="lbl" style="margin:0;">软匹配关键词</span>
+          <span class="sublbl" style="margin:0;">每命中一条加 0.18 分</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
+          <template x-for="(kw, i) in adSoftKw" :key="i">
+            <div style="display:inline-flex; align-items:center; gap:3px;
+                        padding:3px 6px 3px 10px;
+                        background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.25);
+                        border-radius:99px; font-size:12px; color:#818cf8; max-width:220px;">
+              <span x-text="kw" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+              <button @click="adSoftKw.splice(i,1); adRulesDirty=true"
+                      style="background:none; border:none; cursor:pointer; color:var(--muted);
+                             padding:0 2px; font-size:14px; line-height:1; flex-shrink:0;"
+                      title="删除">×</button>
+            </div>
+          </template>
+          <span x-show="adSoftKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="adSoftKwInput" placeholder="输入关键词后回车添加"
+                 @keydown.enter="addAdSoftKw()" style="flex:1;">
+          <button class="btn btn-ghost" @click="addAdSoftKw()">添加</button>
+        </div>
+      </div>
+
+      <!-- 阈值 + 按钮 -->
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px;">
+          <span>过滤阈值</span>
+          <input type="number" class="inp" x-model="adThreshold" min="0.1" max="1.0" step="0.01"
+                 @input="adRulesDirty=true"
+                 style="width:72px; text-align:center;">
+          <span style="font-size:11px; color:var(--dim);">0.1–1.0，默认 0.68</span>
+        </label>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn btn-ghost" @click="resetAdRules()" title="恢复内置默认值">恢复默认</button>
+          <button class="btn btn-amber" @click="saveAdRules()" :disabled="adRulesSaving||!adRulesDirty">
+            <span x-show="adRulesSaving" class="spin"></span>
+            <span x-text="adRulesSaving?'保存中…':'保存'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 说明 -->
+      <div class="info-box" style="margin-top:18px;">
+        <span style="color:#6366f1; flex-shrink:0; margin-top:1px;">ℹ️</span>
+        <p style="font-size:12px; color:var(--muted); line-height:1.7;">
+          强匹配关键词命中时，该行得分直接提升到 0.78；
+          软匹配每命中一条叠加 0.18。行得分超过阈值即被删除。
+          此外，URL、常见小说平台名称会被内置规则自动识别，无需手动配置。
+        </p>
+      </div>
+
+      <!-- 配置文件 -->
+      <div class="card" style="margin-top:14px;">
+        <span class="lbl">配置文件</span>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <code style="flex:1; font-size:11px; color:var(--muted); background:rgba(255,255,255,.04);
+                       padding:6px 10px; border-radius:6px; overflow:hidden; text-overflow:ellipsis;
+                       white-space:nowrap; min-width:0;"
+                x-text="adRulesFilePath||'（尚未保存）'"></code>
+          <button class="btn btn-ghost"
+                  @click="post('/api/open-in-finder',{path:adRulesFilePath})"
+                  :disabled="!adRulesFilePath"
+                  title="在 Finder 中显示">📁 显示</button>
+          <button class="btn btn-ghost"
+                  @click="post('/api/open-file',{path:adRulesFilePath})"
+                  :disabled="!adRulesFilePath"
+                  title="用默认编辑器打开">✏️ 编辑</button>
+          <button class="btn btn-ghost" @click="loadAdRules()"
+                  title="从文件重新加载（外部编辑后使用）">↺ 重新加载</button>
+        </div>
+        <p style="margin-top:8px; font-size:11px; color:var(--dim); line-height:1.5;">
+          保存后生成标准 JSON 文件，可直接用文本编辑器修改，修改后点「重新加载」生效。
+        </p>
+      </div>
+    </div>
+
+>>>>>>> 977088b (add: ad filter)
   </main>
 </div>
 
@@ -1054,14 +1205,31 @@ function app() {
   return {
     page: 'convert',
     navItems: [
+<<<<<<< HEAD
       { id:'convert', icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
       { id:'batch',   icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
       { id:'epub',    icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
       { id:'catalog', icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
+=======
+      { id:'convert',  icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
+      { id:'batch',    icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
+      { id:'epub',     icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
+      { id:'catalog',  icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
+      { id:'adfilter', icon:'🔧', label:'广告规则',   badge:'', badgeOk:true },
+>>>>>>> 977088b (add: ad filter)
     ],
     convertPath:'', convertTitle:'', convertAuthor:'',
     convertShowCatalog:true, convertWorking:false, convertMeta:{},
     convertTitleEdited:false, convertAuthorEdited:false,
+<<<<<<< HEAD
+=======
+    filterAds:true,
+    adHardKw:[], adSoftKw:[], adThreshold:0.68,
+    adDefaultHardKw:[], adDefaultSoftKw:[], adDefaultThreshold:0.68,
+    adHardKwInput:'', adSoftKwInput:'',
+    adRulesDirty:false, adRulesLoaded:false, adRulesSaving:false,
+    adRulesFilePath:'',
+>>>>>>> 977088b (add: ad filter)
     batchDir:'', batchWorking:false, batchResults:[],
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
@@ -1087,7 +1255,11 @@ function app() {
 
     init() {
       document.body.setAttribute('data-theme', this.theme)
+<<<<<<< HEAD
       this.loadRecent(); this.startLogs()
+=======
+      this.loadRecent(); this.startLogs(); this.loadAdRules()
+>>>>>>> 977088b (add: ad filter)
     },
 
     toggleTheme() {
@@ -1135,6 +1307,63 @@ function app() {
     },
     setStatus(t, ok=true) { this.status=t; this.statusOk=ok },
 
+<<<<<<< HEAD
+=======
+    async loadAdRules() {
+      try {
+        const r = await fetch('/api/adfilter/rules').then(r=>r.json())
+        this.adHardKw = [...(r.hard_kw||[])]
+        this.adSoftKw = [...(r.soft_kw||[])]
+        this.adThreshold = r.threshold ?? 0.68
+        this.adDefaultHardKw = [...(r.default_hard_kw||[])]
+        this.adDefaultSoftKw = [...(r.default_soft_kw||[])]
+        this.adDefaultThreshold = r.default_threshold ?? 0.68
+        this.adRulesFilePath = r.file_path || ''
+        this.adRulesLoaded = true
+        this.adRulesDirty = false
+      } catch(_) {}
+    },
+
+    async saveAdRules() {
+      this.adRulesSaving = true
+      try {
+        await this.post('/api/adfilter/rules', {
+          hard_kw: this.adHardKw,
+          soft_kw: this.adSoftKw,
+          threshold: parseFloat(this.adThreshold) || 0.68,
+        })
+        this.adRulesDirty = false
+        this.toast('规则已保存', `强匹配 ${this.adHardKw.length} 条 · 软匹配 ${this.adSoftKw.length} 条`)
+      } catch(e) {
+        this.toast('保存失败', e.message, false)
+      }
+      this.adRulesSaving = false
+    },
+
+    resetAdRules() {
+      this.adHardKw = [...this.adDefaultHardKw]
+      this.adSoftKw = [...this.adDefaultSoftKw]
+      this.adThreshold = this.adDefaultThreshold
+      this.adRulesDirty = true
+    },
+
+    addAdHardKw() {
+      const kw = this.adHardKwInput.trim()
+      if (kw && !this.adHardKw.includes(kw)) {
+        this.adHardKw.push(kw); this.adRulesDirty = true
+      }
+      this.adHardKwInput = ''
+    },
+
+    addAdSoftKw() {
+      const kw = this.adSoftKwInput.trim()
+      if (kw && !this.adSoftKw.includes(kw)) {
+        this.adSoftKw.push(kw); this.adRulesDirty = true
+      }
+      this.adSoftKwInput = ''
+    },
+
+>>>>>>> 977088b (add: ad filter)
     async post(url, body) {
       const r = await fetch(url, {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1192,6 +1421,10 @@ function app() {
       try {
         const r = await this.post('/api/convert', {
           path:this.convertPath, title:this.convertTitle, author:this.convertAuthor,
+<<<<<<< HEAD
+=======
+          filter_ads:this.filterAds,
+>>>>>>> 977088b (add: ad filter)
         })
         this.outputPath=r.output_file; this.progress=100; this.setStatus('转换完成')
         this.navItems[0].badge='✓'; this.navItems[0].badgeOk=true
@@ -1210,7 +1443,11 @@ function app() {
       this.batchWorking=true; this.working=true; this.batchResults=[]
       this.progress=8; this.progressErr=false; this.setStatus('批量处理中…')
       try {
+<<<<<<< HEAD
         const r = await this.post('/api/batch', { dir_path:this.batchDir })
+=======
+        const r = await this.post('/api/batch', { dir_path:this.batchDir, filter_ads:this.filterAds })
+>>>>>>> 977088b (add: ad filter)
         this.batchResults = r.results||[]
         const ok = this.batchResults.filter(x=>!x.error).length
         this.progress=100; this.setStatus(`完成 ${ok}/${this.batchResults.length}`)
@@ -1263,6 +1500,10 @@ function app() {
         const r = await this.post('/api/epub', {
           path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
           cover_image: coverImage||'', cover_url: coverUrl||'', auto_search_cover:false,
+<<<<<<< HEAD
+=======
+          filter_ads:this.filterAds,
+>>>>>>> 977088b (add: ad filter)
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
         this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true
