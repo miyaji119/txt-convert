@@ -124,11 +124,16 @@ class EasyPubOptimizer:
                     break
 
             if not is_chapter:
-                if not in_paragraph:
+                if re.match(r'^[\*＊·•\s]+$', line) and len(line.strip()) <= 5:
+                    if optimized_lines and optimized_lines[-1] != '':
+                        optimized_lines.append('')
+                    optimized_lines.append(line)
+                    in_paragraph = False
+                elif not in_paragraph:
                     optimized_lines.append(line)
                     in_paragraph = True
                 else:
-                    if line.startswith(('「', '『', '"', "'", '“', '（', '(')) or optimized_lines[-1].endswith(('。', '！', '？', '」', '』', '"', "'", '”', '）', ')')):
+                    if line.startswith(('「', '『', '“', '”')) or optimized_lines[-1].endswith(('。', '！', '？', '」', '』', '”')):
                         optimized_lines.extend(['', line])
                     elif optimized_lines[-1]:
                         optimized_lines[-1] += ' ' + line

@@ -426,6 +426,44 @@ async def save_adfilter_rules(req: AdFilterRulesReq):
     return {"ok": True, "file_path": AD_RULES_FILE}
 
 
+# ── 章节识别规则 ───────────────────────────────────────────────
+from chapter_config import CHAPTER_RULES_FILE, DEFAULT_CHAPTER_PATTERNS as _DEFAULT_CHAPTER_PATTERNS
+
+CHAPTER_RULES_FILE = CHAPTER_RULES_FILE  # re-export for clarity
+
+
+def _load_chapter_rules_file() -> dict:
+    if not os.path.isfile(CHAPTER_RULES_FILE):
+        return {}
+    try:
+        with open(CHAPTER_RULES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+@app.get("/api/chapter/rules")
+async def get_chapter_rules():
+    data = _load_chapter_rules_file()
+    return {
+        "patterns":         data.get('patterns', []),
+        "default_patterns": [p[0] for p in _DEFAULT_CHAPTER_PATTERNS],
+        "file_path":        CHAPTER_RULES_FILE,
+    }
+
+
+class ChapterRulesReq(BaseModel):
+    patterns: List[dict]
+
+
+@app.post("/api/chapter/rules")
+async def save_chapter_rules(req: ChapterRulesReq):
+    os.makedirs(os.path.dirname(CHAPTER_RULES_FILE), exist_ok=True)
+    with open(CHAPTER_RULES_FILE, 'w', encoding='utf-8') as f:
+        json.dump({"patterns": req.patterns}, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "file_path": CHAPTER_RULES_FILE}
+
+
 # ── Finder 集成 ────────────────────────────────────────────────
 async def open_finder(req: PathReq):
     p = req.path

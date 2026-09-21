@@ -27,6 +27,7 @@ class ChapterAnalyzer:
         'case_volume':       (1, 2, '案', True),
         'part':              (1, 2, '部分', True),
         'section':           (1, 2, '节', True),
+        'custom':            (1, 2, '章', False),
     }
 
     def __init__(self, config_name: str = 'default'):

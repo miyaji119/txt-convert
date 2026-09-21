@@ -3,7 +3,27 @@
 支持针对不同小说类型配置不同的过滤规则和章节格式模式。
 """
 
+import os
+import json
 from typing import List, Dict
+
+CHAPTER_RULES_FILE = os.path.join(os.path.expanduser('~'), '.txt2epub', 'chapter_rules.json')
+
+
+def _load_user_chapter_patterns() -> list:
+    """从 ~/.txt2epub/chapter_rules.json 加载用户自定义章节正则规则。"""
+    try:
+        if not os.path.isfile(CHAPTER_RULES_FILE):
+            return []
+        with open(CHAPTER_RULES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return [
+            (r['pattern'], 'custom')
+            for r in data.get('patterns', [])
+            if r.get('enabled', True) and r.get('pattern', '').strip()
+        ]
+    except Exception:
+        return []
 
 
 class ChapterConfig:
@@ -14,6 +34,10 @@ class ChapterConfig:
     def __init__(self, config_name: str = 'default'):
         self.config_name = config_name
         self.load_config(config_name)
+        user_pats = _load_user_chapter_patterns()
+        if user_pats:
+            self.CHAPTER_PATTERNS = user_pats + self.CHAPTER_PATTERNS
+            self.NEXT_CHAPTER_PATTERNS = [p[0] for p in user_pats] + self.NEXT_CHAPTER_PATTERNS
 
     @classmethod
     def _get_all_configs(cls) -> Dict[str, Dict]:

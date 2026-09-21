@@ -26,8 +26,42 @@ class EPUBGenerator:
         '文案:', '简介:', '标签：', '主角：', '配角：', '其它：', '年下', 'HE', 'BE'
     ]
 
+    _AUTHOR_NOTE_RE = re.compile(
+        r'^[\s=*]*(作者有话说?|作者说|作话|作者留言)[\s:：。=*]{0,10}$'
+    )
+
     @staticmethod
-    def _extract_author(content: str) -> Optional[str]:
+    def _split_author_note(content: str):
+        """从章节内容末尾拆出「作者有话说」子节。
+
+        Returns:
+            (main_content, note_body) — note_body 为标题行之后的正文，
+            不含标题行本身；未找到则 note_body 为 None。
+        """
+        lines = content.split('\n')
+        note_start = None
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].strip()
+            if not stripped or re.match(r'^=+$', stripped):
+                continue
+            if EPUBGenerator._AUTHOR_NOTE_RE.match(stripped):
+                note_start = i
+            break
+        if note_start is None:
+            return content, None
+
+        main_lines = lines[:note_start]
+        note_body_lines = lines[note_start + 1:]
+
+        while main_lines and not main_lines[-1].strip():
+            main_lines.pop()
+        while note_body_lines and not note_body_lines[0].strip():
+            note_body_lines.pop(0)
+        while note_body_lines and (not note_body_lines[-1].strip() or
+              re.match(r'^=+$', note_body_lines[-1].strip())):
+            note_body_lines.pop()
+
+        return '\n'.join(main_lines), '\n'.join(note_body_lines)
         patterns = [
             r'《[^》]+》作者[：:]\s*([^\n]+)', r'作者[：:]\s*([^\n]+)', r'作者\s+([^\n]+)',
             r'by\s+([^\n]+)', r'【作者】\s*([^\n]+)', r'\[作者\]\s*([^\n]+)',
@@ -241,12 +275,20 @@ class EPUBGenerator:
             )
             for i, chapter in enumerate(chapters):
                 chapter_title = chapter['title']
+                has_author_note = False
                 if '_html' in chapter:
                     html_content = chapter['_html']
                     extra_css = TOC_CSS
                 else:
-                    html_content = EPUBGenerator._chapter_to_html(chapter['content'])
+                    main_content, note_body = EPUBGenerator._split_author_note(chapter['content'])
+                    html_content = EPUBGenerator._chapter_to_html(main_content)
                     extra_css = ''
+                    if note_body is not None:
+                        has_author_note = True
+                        note_html = EPUBGenerator._chapter_to_html(note_body) if note_body.strip() else ''
+                        html_content += (
+                            '\n<h2 id="author-note">作者有话说</h2>\n' + note_html
+                        )
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
                 epub_chapter.content = f'''<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -254,6 +296,7 @@ class EPUBGenerator:
 <style type="text/css">
 body {{ font-family: "SimSun", "STSong", "Noto Serif CJK SC", serif; font-size: 1em; line-height: 1.8; margin: 1em; text-align: justify; }}
 h1 {{ text-align: center; font-size: 1.5em; margin-bottom: 1.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ccc; }}
+h2 {{ font-size: 1.05em; font-weight: normal; margin-top: 2.5em; padding-top: 0.8em; border-top: 1px solid #e0e0e0; color: #888; }}
 p {{ text-indent: 2em; margin: 0.5em 0; }}
 {extra_css}
 </style>
@@ -261,7 +304,17 @@ p {{ text-indent: 2em; margin: 0.5em 0; }}
 <body><h1>{chapter_title}</h1>{html_content}</body></html>'''
                 book.add_item(epub_chapter)
                 spine.append(epub_chapter)
-                toc.append(epub.Link(f'chapter_{i+1:03d}.xhtml', chapter_title, f'ch{i+1}'))
+                file_name = f'chapter_{i+1:03d}.xhtml'
+                if has_author_note:
+                    toc.append((
+                        epub.Section(chapter_title, href=file_name),
+                        [
+                            epub.Link(file_name, chapter_title, f'ch{i+1}'),
+                            epub.Link(f'{file_name}#author-note', '作者有话说', f'ch{i+1}-note'),
+                        ]
+                    ))
+                else:
+                    toc.append(epub.Link(file_name, chapter_title, f'ch{i+1}'))
 
             book.add_item(epub.EpubNcx())
             book.add_item(epub.EpubNav())

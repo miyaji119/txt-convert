@@ -422,15 +422,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
                  style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
           转换后显示章节目录
         </label>
-<<<<<<< HEAD
-=======
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
           <input type="checkbox" x-model="filterAds"
                  style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
           过滤广告行
         </label>
->>>>>>> 977088b (add: ad filter)
         <button class="btn btn-amber" style="margin-left:auto;"
                 @click="doConvert()" :disabled="convertWorking||!convertPath">
           <span x-show="convertWorking" class="spin"></span>
@@ -493,10 +490,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
-<<<<<<< HEAD
-      <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
-        <button class="btn btn-amber" @click="doBatch()" :disabled="batchWorking||!batchDir">
-=======
       <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
@@ -505,7 +498,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
           过滤广告行
         </label>
         <button class="btn btn-amber" style="margin-left:auto;" @click="doBatch()" :disabled="batchWorking||!batchDir">
->>>>>>> 977088b (add: ad filter)
           <span x-show="batchWorking" class="spin"></span>
           <span x-text="batchWorking?'处理中…':'▶  批量转换'"></span>
         </button>
@@ -750,9 +742,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
-<<<<<<< HEAD
-      <div style="display:flex; justify-content:flex-end;">
-=======
       <div style="display:flex; align-items:center; gap:16px; justify-content:flex-end;">
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
@@ -760,7 +749,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
                  style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
           过滤广告行
         </label>
->>>>>>> 977088b (add: ad filter)
         <button class="btn btn-amber" @click="doEpub()"
                 :disabled="epubWorking||coverSearching||!epubPath">
           <span x-show="epubWorking||coverSearching" class="spin"></span>
@@ -885,8 +873,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
     </div>
 
-<<<<<<< HEAD
-=======
     <!-- ── 广告规则 ──────────────────────────────────── -->
     <div x-show="page==='adfilter'" class="page"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
@@ -1005,7 +991,132 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
     </div>
 
->>>>>>> 977088b (add: ad filter)
+    <!-- ── 章节规则 ──────────────────────────────────── -->
+    <div x-show="page==='chapterRules'" class="page"
+         style="max-width:640px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">章节识别规则</h1>
+        <p style="color:var(--muted);">自定义正则规则优先于内置规则匹配，全局生效</p>
+      </div>
+
+      <!-- 自定义规则列表 -->
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <span class="lbl" style="margin:0;">自定义规则</span>
+          <span class="sublbl" style="margin:0;">优先于内置规则</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px; min-height:24px; margin-bottom:10px;">
+          <template x-for="(rule, i) in chapterPatterns" :key="i">
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 10px;
+                        background:rgba(99,102,241,.06); border:1px solid rgba(99,102,241,.2);
+                        border-radius:6px; font-size:12px;">
+              <input type="checkbox" :checked="rule.enabled" @change="toggleChapterPattern(i)"
+                     style="width:13px; height:13px; accent-color:#6366f1; cursor:pointer; flex-shrink:0;">
+              <code style="flex:1; color:var(--text); font-family:'JetBrains Mono',monospace;
+                           overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    x-text="rule.pattern"></code>
+              <button @click="removeChapterPattern(i)"
+                      style="background:none; border:none; cursor:pointer; color:var(--muted);
+                             padding:0 4px; font-size:15px; line-height:1; flex-shrink:0;"
+                      title="删除">×</button>
+            </div>
+          </template>
+          <span x-show="chapterPatterns.length===0" class="sublbl" style="margin:4px 0;">
+            （暂无自定义规则）
+          </span>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="newChapterPattern"
+                 placeholder="输入正则表达式后回车添加，如 ^第(\d+)回\s*(.*)$"
+                 style="flex:1; font-family:'JetBrains Mono',monospace; font-size:12px;"
+                 @keydown.enter="addChapterPattern()">
+          <button class="btn btn-ghost" @click="addChapterPattern()">添加</button>
+        </div>
+      </div>
+
+      <!-- 保存按钮 -->
+      <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:12px;">
+        <button class="btn btn-ghost" @click="loadChapterRules()" title="从文件重新加载">↺ 重新加载</button>
+        <button class="btn btn-amber" @click="saveChapterRules()" :disabled="chapterRulesSaving||!chapterRulesDirty">
+          <span x-show="chapterRulesSaving" class="spin"></span>
+          <span x-text="chapterRulesSaving?'保存中…':'保存'"></span>
+        </button>
+      </div>
+
+      <!-- 说明 + 示例 -->
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">写法说明</span>
+        <p style="font-size:12px; color:var(--muted); line-height:1.8; margin-bottom:10px;">
+          正则须包含 <strong>两个捕获组</strong>：第 1 组匹配章节号，第 2 组匹配标题（可用 <code style="color:var(--text);">(.*)</code> 表示可为空）。
+          自定义规则排在内置规则之前，优先匹配。
+        </p>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:11px; color:var(--dim); margin-bottom:2px;">常用示例（点击填入输入框）：</div>
+          <template x-for="ex in [
+            { pat: '^第(\\\\d+)回\\\\s*(.*)$',         desc: '第31回 标题' },
+            { pat: '^(\\\\d+)\\\\s+(.+)$',              desc: '31 标题（数字空格标题）' },
+            { pat: '^【第(\\\\d+)章】\\\\s*(.*)$',       desc: '【第31章】标题' },
+            { pat: '^第([零一二三四五六七八九十百千万\\\\d]+)节\\\\s*(.*)$', desc: '第三节 标题' },
+          ]" :key="ex.pat">
+            <div style="display:flex; align-items:center; gap:8px; cursor:pointer;
+                        padding:5px 8px; border-radius:5px; transition:background .15s;"
+                 @click="newChapterPattern=ex.pat"
+                 @mouseenter="$el.style.background='rgba(99,102,241,.08)'"
+                 @mouseleave="$el.style.background=''">
+              <code style="flex:1; font-size:11px; color:#818cf8;
+                           font-family:'JetBrains Mono',monospace;"
+                    x-text="ex.pat"></code>
+              <span style="font-size:11px; color:var(--muted); white-space:nowrap;"
+                    x-text="'← ' + ex.desc"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 内置默认规则（折叠） -->
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
+             @click="chapterDefaultsOpen=!chapterDefaultsOpen">
+          <span class="lbl" style="margin:0;">内置默认规则</span>
+          <span style="font-size:12px; color:var(--muted);"
+                x-text="chapterDefaultsOpen?'▲ 收起':'▼ 展开 '+chapterDefaultPatterns.length+' 条'"></span>
+        </div>
+        <div x-show="chapterDefaultsOpen" style="margin-top:10px; display:flex; flex-direction:column; gap:4px;">
+          <template x-for="(pat, i) in chapterDefaultPatterns" :key="i">
+            <div style="padding:4px 8px; background:rgba(255,255,255,.03); border-radius:4px;">
+              <code style="font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace;"
+                    x-text="pat"></code>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 配置文件 -->
+      <div class="card">
+        <span class="lbl">配置文件</span>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <code style="flex:1; font-size:11px; color:var(--muted); background:rgba(255,255,255,.04);
+                       padding:6px 10px; border-radius:6px; overflow:hidden; text-overflow:ellipsis;
+                       white-space:nowrap; min-width:0;"
+                x-text="chapterRulesFilePath||'（尚未保存）'"></code>
+          <button class="btn btn-ghost"
+                  @click="post('/api/open-in-finder',{path:chapterRulesFilePath})"
+                  :disabled="!chapterRulesFilePath"
+                  title="在 Finder 中显示">📁 显示</button>
+          <button class="btn btn-ghost"
+                  @click="post('/api/open-file',{path:chapterRulesFilePath})"
+                  :disabled="!chapterRulesFilePath"
+                  title="用默认编辑器打开">✏️ 编辑</button>
+        </div>
+        <p style="margin-top:8px; font-size:11px; color:var(--dim); line-height:1.5;">
+          保存后生成标准 JSON 文件，可直接用文本编辑器修改，修改后点「重新加载」生效。
+        </p>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1205,31 +1316,26 @@ function app() {
   return {
     page: 'convert',
     navItems: [
-<<<<<<< HEAD
-      { id:'convert', icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
-      { id:'batch',   icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
-      { id:'epub',    icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
-      { id:'catalog', icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
-=======
       { id:'convert',  icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
       { id:'batch',    icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
       { id:'epub',     icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
       { id:'catalog',  icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
-      { id:'adfilter', icon:'🔧', label:'广告规则',   badge:'', badgeOk:true },
->>>>>>> 977088b (add: ad filter)
+      { id:'adfilter',     icon:'🔧', label:'广告规则',   badge:'', badgeOk:true },
+      { id:'chapterRules', icon:'📖', label:'章节规则',   badge:'', badgeOk:true },
     ],
     convertPath:'', convertTitle:'', convertAuthor:'',
     convertShowCatalog:true, convertWorking:false, convertMeta:{},
     convertTitleEdited:false, convertAuthorEdited:false,
-<<<<<<< HEAD
-=======
     filterAds:true,
     adHardKw:[], adSoftKw:[], adThreshold:0.68,
     adDefaultHardKw:[], adDefaultSoftKw:[], adDefaultThreshold:0.68,
     adHardKwInput:'', adSoftKwInput:'',
     adRulesDirty:false, adRulesLoaded:false, adRulesSaving:false,
     adRulesFilePath:'',
->>>>>>> 977088b (add: ad filter)
+    chapterPatterns:[], chapterDefaultPatterns:[],
+    chapterRulesFilePath:'',
+    chapterRulesDirty:false, chapterRulesLoaded:false, chapterRulesSaving:false,
+    newChapterPattern:'', chapterDefaultsOpen:false,
     batchDir:'', batchWorking:false, batchResults:[],
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
@@ -1255,11 +1361,7 @@ function app() {
 
     init() {
       document.body.setAttribute('data-theme', this.theme)
-<<<<<<< HEAD
-      this.loadRecent(); this.startLogs()
-=======
-      this.loadRecent(); this.startLogs(); this.loadAdRules()
->>>>>>> 977088b (add: ad filter)
+      this.loadRecent(); this.startLogs(); this.loadAdRules(); this.loadChapterRules()
     },
 
     toggleTheme() {
@@ -1307,8 +1409,6 @@ function app() {
     },
     setStatus(t, ok=true) { this.status=t; this.statusOk=ok },
 
-<<<<<<< HEAD
-=======
     async loadAdRules() {
       try {
         const r = await fetch('/api/adfilter/rules').then(r=>r.json())
@@ -1363,7 +1463,47 @@ function app() {
       this.adSoftKwInput = ''
     },
 
->>>>>>> 977088b (add: ad filter)
+    async loadChapterRules() {
+      try {
+        const r = await fetch('/api/chapter/rules').then(r=>r.json())
+        this.chapterPatterns = (r.patterns||[]).map(p=>({...p}))
+        this.chapterDefaultPatterns = r.default_patterns||[]
+        this.chapterRulesFilePath = r.file_path||''
+        this.chapterRulesLoaded = true
+        this.chapterRulesDirty = false
+      } catch(_) {}
+    },
+
+    async saveChapterRules() {
+      this.chapterRulesSaving = true
+      try {
+        await this.post('/api/chapter/rules', { patterns: this.chapterPatterns })
+        this.chapterRulesDirty = false
+        this.toast('章节规则已保存', `自定义规则 ${this.chapterPatterns.length} 条`)
+      } catch(e) {
+        this.toast('保存失败', e.message, false)
+      }
+      this.chapterRulesSaving = false
+    },
+
+    addChapterPattern() {
+      const pat = this.newChapterPattern.trim()
+      if (!pat) return
+      this.chapterPatterns.push({ pattern: pat, enabled: true })
+      this.newChapterPattern = ''
+      this.chapterRulesDirty = true
+    },
+
+    removeChapterPattern(i) {
+      this.chapterPatterns.splice(i, 1)
+      this.chapterRulesDirty = true
+    },
+
+    toggleChapterPattern(i) {
+      this.chapterPatterns[i].enabled = !this.chapterPatterns[i].enabled
+      this.chapterRulesDirty = true
+    },
+
     async post(url, body) {
       const r = await fetch(url, {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1421,10 +1561,7 @@ function app() {
       try {
         const r = await this.post('/api/convert', {
           path:this.convertPath, title:this.convertTitle, author:this.convertAuthor,
-<<<<<<< HEAD
-=======
           filter_ads:this.filterAds,
->>>>>>> 977088b (add: ad filter)
         })
         this.outputPath=r.output_file; this.progress=100; this.setStatus('转换完成')
         this.navItems[0].badge='✓'; this.navItems[0].badgeOk=true
@@ -1443,11 +1580,7 @@ function app() {
       this.batchWorking=true; this.working=true; this.batchResults=[]
       this.progress=8; this.progressErr=false; this.setStatus('批量处理中…')
       try {
-<<<<<<< HEAD
-        const r = await this.post('/api/batch', { dir_path:this.batchDir })
-=======
         const r = await this.post('/api/batch', { dir_path:this.batchDir, filter_ads:this.filterAds })
->>>>>>> 977088b (add: ad filter)
         this.batchResults = r.results||[]
         const ok = this.batchResults.filter(x=>!x.error).length
         this.progress=100; this.setStatus(`完成 ${ok}/${this.batchResults.length}`)
@@ -1500,10 +1633,7 @@ function app() {
         const r = await this.post('/api/epub', {
           path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
           cover_image: coverImage||'', cover_url: coverUrl||'', auto_search_cover:false,
-<<<<<<< HEAD
-=======
           filter_ads:this.filterAds,
->>>>>>> 977088b (add: ad filter)
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
         this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true
