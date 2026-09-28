@@ -11,11 +11,13 @@ from typing import Dict, List, Optional, Set, Tuple
 class ConsistencyChecker:
 
     # 人名：动作动词前缀（中文姓名 2-3 字，不抓更长的句子片段）
+    # 注：孤立的「道」必须后跟引号/冒号才算对话用法，避免把「知道」「明道」误匹配
     _ACTION_RE = re.compile(
         r'([一-龥]{2,3})'
         r'[的地]?'
-        r'(?:说道?|问道?|答道?|道|叫道?|喊道?|笑道?|怒道?|低声道?'
-        r'|沉声道?|冷道?|轻声道?|哼道?|叹道?|嗤道?)',
+        r'(?:说道?|问道?|答道?|叫道?|喊道?|笑道?|怒道?|低声道?'
+        r'|沉声道?|冷道?|轻声道?|哼道?|叹道?|嗤道?'
+        r'|道(?=[：:「『""」]))',
     )
     # 人名：引号/冒号前缀
     _QUOTE_RE = re.compile(r'([一-龥]{2,3})[：:「『""]\s*[一-龥]')
@@ -31,7 +33,12 @@ class ConsistencyChecker:
         '不没别非未也还又都而且但因和与或是为有在到从对向将让被把'
         '他她它这那什么谁某各每几多少可真很更最已就才只也还都再'
         '虽然虽然由于因此所以只是只有只要其实其中其他'
+        '一些了'       # 数词"一"、量词"些"、助词"了"不会开头人名
+        '们偶'         # "们"是复数后缀，"偶"常为副词"偶尔"，均不起头人名
     )
+
+    # 含有这些字的捕获结果是语法短语而非实体（了=完成体，的=领属标记）
+    _PHRASE_CHARS = frozenset('了的')
 
     @classmethod
     def _extract_entities(cls, text: str) -> Set[str]:
@@ -39,11 +46,15 @@ class ConsistencyChecker:
         for pat in (cls._ACTION_RE, cls._QUOTE_RE):
             for m in pat.finditer(text):
                 name = m.group(1).strip()
-                if len(name) >= 2 and name[0] not in cls._BAD_STARTS:
+                if (len(name) >= 2
+                        and name[0] not in cls._BAD_STARTS
+                        and not any(c in name for c in cls._PHRASE_CHARS)):
                     entities.add(name)
         for m in cls._PLACE_RE.finditer(text):
             place = m.group(1).strip()
-            if len(place) >= 2 and place[0] not in cls._BAD_STARTS:
+            if (len(place) >= 2
+                    and place[0] not in cls._BAD_STARTS
+                    and not any(c in place for c in cls._PHRASE_CHARS)):
                 entities.add(place)
         return entities
 
@@ -61,7 +72,7 @@ class ConsistencyChecker:
         Args:
             content:           原始文本
             chapter_structure: ChapterAnalyzer.analyze_chapter_structure() 的返回值
-            window:            用前 N 章的实体池代表「前段世界」
+            window:            保留参数（不再使用固定窗口；改为累积池，更健壮）
             confirm_n:         连续 N 章与前段零重叠才确认为不一致
             min_entities:      两侧实体数均 < 该值时跳过比较（章节太短）
 
@@ -76,7 +87,7 @@ class ConsistencyChecker:
             }
         """
         chapters = chapter_structure.get('chapters', [])
-        if len(chapters) < window + confirm_n + 1:
+        if len(chapters) < confirm_n + 2:
             return None
 
         lines = content.split('\n')
@@ -91,29 +102,30 @@ class ConsistencyChecker:
             cls._extract_entities(chapter_text(ch)) for ch in chapters
         ]
 
+        # 使用累积实体池（含所有已处理章节）而非固定窗口
+        # 好处：番外章节换了配角也不会误判，因为该配角往往在正文中出现过
+        cumulative_pool: Set[str] = set()
         zero_streak = 0
         streak_start_idx = -1
 
-        for i in range(window, len(chapters)):
-            # 前段实体池
-            left_pool: Set[str] = set()
-            for j in range(max(0, i - window), i):
-                left_pool |= entity_sets[j]
-
-            current = entity_sets[i]
-
-            if len(left_pool) < min_entities or len(current) < min_entities:
-                zero_streak = 0
+        for i, current in enumerate(entity_sets):
+            if i == 0:
+                cumulative_pool |= current
                 continue
 
-            overlap = left_pool & current
+            if len(cumulative_pool) < min_entities or len(current) < min_entities:
+                zero_streak = 0
+                cumulative_pool |= current
+                continue
+
+            overlap = cumulative_pool & current
             if not overlap:
                 if zero_streak == 0:
                     streak_start_idx = i
                 zero_streak += 1
                 if zero_streak >= confirm_n:
                     split_after = streak_start_idx - 1
-                    left_sample = sorted(left_pool)[:6]
+                    left_sample = sorted(cumulative_pool)[:6]
                     right_sample = sorted(current)[:6]
                     return {
                         'split_after': split_after,
@@ -124,6 +136,8 @@ class ConsistencyChecker:
                     }
             else:
                 zero_streak = 0
+
+            cumulative_pool |= current
 
         return None
 

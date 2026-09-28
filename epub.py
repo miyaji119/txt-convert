@@ -27,7 +27,26 @@ class EPUBGenerator:
     ]
 
     _AUTHOR_NOTE_RE = re.compile(
-        r'^[\s=*]*(作者有话说?|作者说|作话|作者留言)[\s:：。=*]{0,10}$'
+        r'^[\s=*]*(作者有话要?说?|作者说|作话|作者留言)[\s:：。=*]{0,10}$'
+    )
+
+    _SCENE_BREAK_PAT = re.compile(r'^[\*＊·•\s]+$')
+
+    _EPUB_CSS = (
+        '@charset "UTF-8";'
+        'body{font-family:"Noto Serif CJK SC","Source Han Serif SC","思源宋体","STSong","SimSun","宋体",serif;'
+        'font-size:1em;line-height:2;margin:.8em 1.5em;color:#1c1c1c;text-align:justify;'
+        'word-break:break-all;overflow-wrap:break-word;-webkit-hyphens:none;hyphens:none}'
+        'h1{font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
+        'margin:2em 0 1.8em;padding-bottom:.6em;border-bottom:1px solid #c0c0c0;letter-spacing:.08em}'
+        'h2{font-size:.92em;font-weight:normal;text-align:center;margin-top:3em;'
+        'padding:.5em 0 .3em;border-top:1px solid #e0e0e0;color:#999;letter-spacing:.1em}'
+        'p{text-indent:0;margin:0;padding:.25em 0}'
+        'p.scene-break{text-indent:0;text-align:center;color:#bbb;padding:.8em 0;letter-spacing:.5em}'
+        '.toc{list-style:none;padding:0;margin:1.5em 0}'
+        '.toc li{padding:.55em .1em;border-bottom:1px solid #ebebeb}'
+        '.toc a{text-decoration:none;color:#2c2c2c;font-size:.95em}'
+        '.toc a:hover{text-decoration:underline}'
     )
 
     @staticmethod
@@ -62,9 +81,12 @@ class EPUBGenerator:
             note_body_lines.pop()
 
         return '\n'.join(main_lines), '\n'.join(note_body_lines)
+
+    @staticmethod
+    def _extract_author(content: str) -> Optional[str]:
         patterns = [
             r'《[^》]+》作者[：:]\s*([^\n]+)', r'作者[：:]\s*([^\n]+)', r'作者\s+([^\n]+)',
-            r'by\s+([^\n]+)', r'【作者】\s*([^\n]+)', r'\[作者\]\s*([^\n]+)',
+            r'by\s+([^\n]+)', r'《作者》\s*([^\n]+)', r'\[作者\]\s*([^\n]+)',
         ]
         for pattern in patterns:
             match = re.search(pattern, content)
@@ -149,13 +171,36 @@ class EPUBGenerator:
         for ch in structure['chapters']:
             start = ch['start_line'] - 1
             end = ch['end_line']
-            chapter_lines = [line for line in lines[start:end] if not _skip_comment(line)]
+            chapter_lines = [line for line in lines[start+1:end] if not _skip_comment(line)]
             chapters.append({'title': ch['title'], 'content': '\n'.join(chapter_lines)})
 
         if not chapters:
             chapters = [{'title': '正文', 'content': content}]
 
         return chapters
+
+    @staticmethod
+    def _merge_dialogue_splits(content: str) -> str:
+        """合并被拆行的对话：行尾为「：」且下一非空行以引号开头时拼回一行。"""
+        _OPEN_QUOTES = frozenset('"「『“‘')
+        lines = content.split('\n')
+        out = []
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+            if stripped and stripped[-1] in ('：', ':'):
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines):
+                    next_s = lines[j].strip()
+                    if next_s and next_s[0] in _OPEN_QUOTES:
+                        out.append(lines[i].rstrip() + next_s)
+                        i = j + 1
+                        continue
+            out.append(lines[i])
+            i += 1
+        return '\n'.join(out)
 
     @staticmethod
     def _clean_chapter_content(content: str) -> str:
@@ -178,18 +223,30 @@ class EPUBGenerator:
     @staticmethod
     def _chapter_to_html(content: str) -> str:
         content = EPUBGenerator._clean_chapter_content(content)
+        content = EPUBGenerator._merge_dialogue_splits(content)
         paragraphs = []
         current = []
+
+        def _flush():
+            if not current:
+                return
+            text = ''.join(current)
+            stripped = text.strip()
+            if EPUBGenerator._SCENE_BREAK_PAT.match(stripped) and stripped:
+                paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
+            else:
+                paragraphs.append(f'<p>{text}</p>')
+            current.clear()
+
         for line in content.split('\n'):
             line = line.strip()
             if line:
+                if not current:
+                    line = '　　' + line
                 current.append(html.escape(line, quote=True))
             else:
-                if current:
-                    paragraphs.append(f'<p>{" ".join(current)}</p>')
-                    current = []
-        if current:
-            paragraphs.append(f'<p>{" ".join(current)}</p>')
+                _flush()
+        _flush()
         return '\n'.join(paragraphs)
 
     @staticmethod
@@ -267,41 +324,45 @@ class EPUBGenerator:
             # 生成章节
             spine = ['nav']
             toc = []
-            TOC_CSS = (
-                '.toc{list-style:none;padding:0;margin:1em 0}'
-                '.toc li{padding:.45em 0;border-bottom:1px solid #e0e0e0}'
-                '.toc a{text-decoration:none;color:#333;font-size:1em}'
-                '.toc a:hover{text-decoration:underline}'
+            css_item = epub.EpubItem(
+                uid='main-style', file_name='styles/style.css',
+                media_type='text/css',
+                content=EPUBGenerator._EPUB_CSS.encode('utf-8'),
             )
+            book.add_item(css_item)
             for i, chapter in enumerate(chapters):
                 chapter_title = chapter['title']
                 has_author_note = False
                 if '_html' in chapter:
                     html_content = chapter['_html']
-                    extra_css = TOC_CSS
+                    body_type = 'frontmatter toc'
                 else:
                     main_content, note_body = EPUBGenerator._split_author_note(chapter['content'])
                     html_content = EPUBGenerator._chapter_to_html(main_content)
-                    extra_css = ''
+                    body_type = 'bodymatter chapter'
                     if note_body is not None:
                         has_author_note = True
                         note_html = EPUBGenerator._chapter_to_html(note_body) if note_body.strip() else ''
                         html_content += (
-                            '\n<h2 id="author-note">作者有话说</h2>\n' + note_html
+                            '\n<h2 id="author-note">作者有话要说</h2>\n' + note_html
                         )
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
-                epub_chapter.content = f'''<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><meta charset="UTF-8" /><title>{chapter_title}</title>
-<style type="text/css">
-body {{ font-family: "SimSun", "STSong", "Noto Serif CJK SC", serif; font-size: 1em; line-height: 1.8; margin: 1em; text-align: justify; }}
-h1 {{ text-align: center; font-size: 1.5em; margin-bottom: 1.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ccc; }}
-h2 {{ font-size: 1.05em; font-weight: normal; margin-top: 2.5em; padding-top: 0.8em; border-top: 1px solid #e0e0e0; color: #888; }}
-p {{ text-indent: 2em; margin: 0.5em 0; }}
-{extra_css}
-</style>
-</head>
-<body><h1>{chapter_title}</h1>{html_content}</body></html>'''
+                epub_chapter.content = (
+                    '<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<!DOCTYPE html>\n'
+                    '<html xmlns="http://www.w3.org/1999/xhtml"'
+                    ' xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="zh">\n'
+                    '<head>\n'
+                    '  <meta charset="UTF-8"/>\n'
+                    f'  <title>{chapter_title}</title>\n'
+                    '  <link rel="stylesheet" type="text/css" href="styles/style.css"/>\n'
+                    '</head>\n'
+                    f'<body epub:type="{body_type}">\n'
+                    f'<h1>{chapter_title}</h1>\n'
+                    f'{html_content}\n'
+                    '</body>\n'
+                    '</html>'
+                ).encode('utf-8')
                 book.add_item(epub_chapter)
                 spine.append(epub_chapter)
                 file_name = f'chapter_{i+1:03d}.xhtml'
@@ -310,7 +371,7 @@ p {{ text-indent: 2em; margin: 0.5em 0; }}
                         epub.Section(chapter_title, href=file_name),
                         [
                             epub.Link(file_name, chapter_title, f'ch{i+1}'),
-                            epub.Link(f'{file_name}#author-note', '作者有话说', f'ch{i+1}-note'),
+                            epub.Link(f'{file_name}#author-note', '作者有话要说', f'ch{i+1}-note'),
                         ]
                     ))
                 else:
