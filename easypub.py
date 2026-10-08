@@ -3,7 +3,6 @@
 import os
 import re
 import json
-from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 
 from encoding import EncodingDetector
@@ -18,9 +17,9 @@ class EasyPubOptimizer:
     """EasyPub专用优化器"""
 
     EASYPUB_CHAPTER_PATTERNS = [
-        (r'^.*第([零一二三四五六七八九十百千万\d]+)章[：:，,]?\s*(.*)$', r'第\1章 \2'),
-        (r'^.*[Cc]hapter\s*([\d零一二三四五六七八九十百千万]+)[：:，,]?\s*(.*)$', r'第\1章 \2'),
-        (r'^.*第([零一二三四五六七八九十百千万\d]+)卷[：:，,]?\s*(.*)$', r'第\1卷 \2'),
+        (r'^.*第([零一二三四五六七八九十百千万两\d]+)[章节回][：:，,]?\s*(.*)$', r'第\1章 \2'),
+        (r'^.*[Cc]hapter\s*([\d零一二三四五六七八九十百千万两]+)[：:，,]?\s*(.*)$', r'第\1章 \2'),
+        (r'^.*第([零一二三四五六七八九十百千万两\d]+)卷[：:，,]?\s*(.*)$', r'第\1卷 \2'),
         (r'^\d+\s*[·•・]\s*第\s*(\d+)\s*章\s*(.*)$', r'第\1章 \2'),
         (r'^(\d+)\s*[·•・]\s*(.+)$', r'第\1章 \2'),
         (r'^(\d+)[\.、]\s*(.*)$', r'第\1章 \2'),
@@ -119,7 +118,7 @@ class EasyPubOptimizer:
                         'original_line': i + 1, 'number': chapter_num_int,
                         'title': chapter_title, 'standard_line': standard_line
                     })
-                    optimized_lines.extend(['', '=' * 50, standard_line, '=', ''])
+                    optimized_lines.extend(['', standard_line, ''])
                     in_paragraph = False
                     break
 
@@ -201,21 +200,6 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
         print(f"   ⚠️ 原目录无写入权限，输出到脚本目录: {output_file}")
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(optimized_content)
-
-    metadata = f"""<!--
-EasyPub元数据提示
-===================================================
-书名: {book_title if book_title else os.path.basename(input_file).replace('.txt', '')}
-作者: {author if author else "未知"}
-生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-章节数: {analysis['total_chapters']}
-文件大小: {DirectoryDisplay.format_size(len(optimized_content.encode('utf-8')))}
-===================================================
--->
-"""
-    with open(output_file, 'r+', encoding='utf-8') as f:
-        f.seek(0, 0)
-        f.write(metadata + f.read())
 
     print(f"   ✅ 优化完成!")
     print(f"   输出: {output_file}")

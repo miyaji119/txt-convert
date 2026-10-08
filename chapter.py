@@ -12,7 +12,7 @@ class ChapterAnalyzer:
 
     # 标准章节模式配置: ptype -> (章节号group, 标题group, 单位, 是否中文数字)
     _STANDARD = {
-        'equals':            (1, 2, '章', False),
+        'equals':            (1, 2, '章', True),
         'chinese':           (1, 2, '章', True),
         'prefix':            (2, 3, '章', True),
         'simple_number':     (1, 2, '章', False),
@@ -44,16 +44,28 @@ class ChapterAnalyzer:
     # ------------------------------------------------------------------
     @staticmethod
     def chinese_to_arabic(cn: str) -> int:
-        """中文数字转阿拉伯数字"""
-        cn_map = {'零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-                  '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
-        if cn == '十':
-            return 10
-        if '十' in cn:
-            parts = cn.split('十')
-            left = cn_map.get(parts[0], 0) if parts[0] else 1
-            return left * 10 + cn_map.get(parts[1], 0) if len(parts) > 1 and parts[1] else left * 10
-        return cn_map.get(cn, 0)
+        """中文数字转阿拉伯数字，支持百千万两"""
+        if cn.isdigit():
+            return int(cn)
+        cn_val = {'零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
+                  '五': 5, '六': 6, '七': 7, '八': 8, '九': 9}
+        unit_val = {'十': 10, '百': 100, '千': 1000, '万': 10000}
+        result = 0
+        temp = 0
+        for char in cn:
+            if char in cn_val:
+                temp = cn_val[char]
+            elif char in unit_val:
+                unit = unit_val[char]
+                if unit == 10000:
+                    result = (result + temp) * unit
+                    temp = 0
+                else:
+                    if temp == 0:
+                        temp = 1  # 「十」起头时隐含「一」，如十五 = 15
+                    result += temp * unit
+                    temp = 0
+        return result + temp
 
     @staticmethod
     def normalize_chapter_num(num_str: str) -> int:

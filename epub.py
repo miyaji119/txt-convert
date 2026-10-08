@@ -32,22 +32,46 @@ class EPUBGenerator:
 
     _SCENE_BREAK_PAT = re.compile(r'^[\*＊·•\s]+$')
 
-    _EPUB_CSS = (
-        '@charset "UTF-8";'
-        'body{font-family:"Noto Serif CJK SC","Source Han Serif SC","思源宋体","STSong","SimSun","宋体",serif;'
-        'font-size:1em;line-height:2;margin:.8em 1.5em;color:#1c1c1c;text-align:justify;'
-        'word-break:break-all;overflow-wrap:break-word;-webkit-hyphens:none;hyphens:none}'
-        'h1{font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
-        'margin:2em 0 1.8em;padding-bottom:.6em;border-bottom:1px solid #c0c0c0;letter-spacing:.08em}'
-        'h2{font-size:.92em;font-weight:normal;text-align:center;margin-top:3em;'
-        'padding:.5em 0 .3em;border-top:1px solid #e0e0e0;color:#999;letter-spacing:.1em}'
-        'p{text-indent:0;margin:0;padding:.25em 0}'
-        'p.scene-break{text-indent:0;text-align:center;color:#bbb;padding:.8em 0;letter-spacing:.5em}'
-        '.toc{list-style:none;padding:0;margin:1.5em 0}'
-        '.toc li{padding:.55em .1em;border-bottom:1px solid #ebebeb}'
-        '.toc a{text-decoration:none;color:#2c2c2c;font-size:.95em}'
-        '.toc a:hover{text-decoration:underline}'
+    # 对话引号识别：中文 "..." 和角括号 「...」 『...』
+    _DLG_PATS = [
+        (re.compile(r'“[^”]{0,400}”'), 'dlg-cn'),
+        (re.compile(r'「[^」]{0,400}」'), 'dlg-sq'),
+        (re.compile(r'『[^』]{0,400}』'), 'dlg-sq'),
+    ]
+
+    _TOC_PAGE_SIZE = 20
+
+    _VOLUME_RE = re.compile(
+        r'^(第[零一二三四五六七八九十百千万两\d]+卷|卷[零一二三四五六七八九十百千万两\d]|[上中下]卷)'
     )
+
+    _CSS_TEMPLATE = (
+        '@charset "UTF-8";'
+        'body{{font-family:"Noto Serif CJK SC","Source Han Serif SC","思源宋体","STSong","SimSun","宋体",serif;'
+        'font-size:1em;margin:{margin};color:#1c1c1c;word-break:break-all;overflow-wrap:break-word;'
+        '-webkit-hyphens:none;hyphens:none}}'
+        'h1{{font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
+        'margin:2em 0 1.8em;padding-bottom:.6em;border-bottom:1px solid #c0c0c0;letter-spacing:.08em}}'
+        'h2{{font-size:.92em;font-weight:normal;text-align:center;margin-top:3em;'
+        'padding:.5em 0 .3em;border-top:1px solid #e0e0e0;color:#999;letter-spacing:.1em}}'
+        'p{{text-indent:{text_indent};line-height:{line_height};margin:.35em 0;text-align:justify}}'
+        'p.noind{{text-indent:0}}'
+        'p.scene-break{{text-indent:0;text-align:center;color:#bbb;padding:.8em 0;letter-spacing:.5em}}'
+        '.toc{{list-style:none;padding:0;margin:1.5em 0}}'
+        '.toc li{{padding:.55em .1em;border-bottom:1px solid #ebebeb}}'
+        '.toc a{{text-decoration:none;color:#2c2c2c;font-size:.95em}}'
+        '.toc a:hover{{text-decoration:underline}}'
+        '.toc-vol>a{{font-weight:600;color:#1a1a1a}}'
+        '.toc-sub{{margin-left:1.5em;list-style:none}}'
+    )
+
+    @classmethod
+    def _build_css(cls, margin: str = "0 4%", line_height: float = 1.8,
+                   text_indent: str = "2em", custom_css: str = "") -> str:
+        css = cls._CSS_TEMPLATE.format(
+            margin=margin, line_height=line_height, text_indent=text_indent
+        )
+        return css + (custom_css or '')
 
     @staticmethod
     def _split_author_note(content: str):
@@ -137,6 +161,33 @@ class EPUBGenerator:
 
         return None
 
+    # 句子终止符：紧接这些字符的段末可以安全拼接下一段
+    _TERMINAL = frozenset('。！？"…』」')
+
+    @staticmethod
+    def _merge_duplicate_chapters(chapters: List[dict]) -> List[dict]:
+        """合并相邻的同名章节（抓取断点造成的重复章节）。"""
+        merged: List[dict] = []
+        for ch in chapters:
+            if merged and merged[-1]['title'] == ch['title']:
+                prev = merged[-1]
+                prev_tail = prev['content'].rstrip()
+                curr_head = ch['content'].lstrip()
+                if prev_tail and prev_tail[-1] not in EPUBGenerator._TERMINAL:
+                    prev['content'] = prev_tail + curr_head
+                else:
+                    prev['content'] = prev['content'].rstrip('\n') + '\n' + curr_head
+            else:
+                merged.append(dict(ch))
+        return merged
+
+    @staticmethod
+    def _apply_dialogue_spans(text: str) -> str:
+        """将对话引号内容包裹在 span 中，供 CSS 自定义样式。"""
+        for pat, cls in EPUBGenerator._DLG_PATS:
+            text = pat.sub(lambda m, c=cls: f'<span class="{c}">{m.group(0)}</span>', text)
+        return text
+
     @staticmethod
     def _parse_chapters(content: str) -> List[dict]:
         """解析章节结构（使用 ChapterAnalyzer 统一识别）"""
@@ -177,7 +228,7 @@ class EPUBGenerator:
         if not chapters:
             chapters = [{'title': '正文', 'content': content}]
 
-        return chapters
+        return EPUBGenerator._merge_duplicate_chapters(chapters)
 
     @staticmethod
     def _merge_dialogue_splits(content: str) -> str:
@@ -235,14 +286,12 @@ class EPUBGenerator:
             if EPUBGenerator._SCENE_BREAK_PAT.match(stripped) and stripped:
                 paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
             else:
-                paragraphs.append(f'<p>{text}</p>')
+                paragraphs.append(f'<p>{EPUBGenerator._apply_dialogue_spans(text)}</p>')
             current.clear()
 
         for line in content.split('\n'):
             line = line.strip()
             if line:
-                if not current:
-                    line = '　　' + line
                 current.append(html.escape(line, quote=True))
             else:
                 _flush()
@@ -251,7 +300,10 @@ class EPUBGenerator:
 
     @staticmethod
     def txt_to_epub(txt_path: str, output_path: str = None, book_title: str = "", author: str = "",
-                    cover_image: str = None, auto_search_cover: bool = False, cover_url: str = None) -> Optional[str]:
+                    cover_image: str = None, auto_search_cover: bool = False, cover_url: str = None,
+                    description: str = "", publisher: str = "",
+                    margin: str = "0 4%", line_height: float = 1.8,
+                    text_indent: str = "2em", custom_css: str = "") -> Optional[str]:
         """将TXT文件转换为EPUB"""
         if not EPUB_SUPPORT:
             print("❌ EPUB生成功能不可用，请先安装ebooklib库")
@@ -284,6 +336,10 @@ class EPUBGenerator:
             book.set_title(book_title)
             book.set_language('zh')
             book.add_author(author if author else "未知")
+            if description:
+                book.add_metadata('DC', 'description', description)
+            if publisher:
+                book.add_metadata('DC', 'publisher', publisher)
 
             # 封面处理
             actual_cover_path = cover_image
@@ -302,32 +358,96 @@ class EPUBGenerator:
                 except Exception as e:
                     print(f"⚠️ 添加封面失败: {e}")
 
-            # 插入目录章节（在简介/前言之后）
+            # 插入目录（支持多页分页及卷级两级结构）
             INTRO_TITLES = ('文案简介', '前言')
             insert_pos = 1 if (chapters and chapters[0]['title'] in INTRO_TITLES) else 0
 
-            # 计算目录插入后各章节的文件编号，构建目录 HTML
-            toc_items_html = []
-            for j, ch in enumerate(chapters):
-                if ch['title'] in INTRO_TITLES:
-                    continue
-                file_idx = j + 2 if j >= insert_pos else j + 1
-                toc_items_html.append(
-                    f'<li><a href="chapter_{file_idx:03d}.xhtml">{html.escape(ch["title"])}</a></li>'
-                )
-            toc_chapter = {
-                'title': '目录',
-                '_html': '<ol class="toc">\n' + '\n'.join(toc_items_html) + '\n</ol>',
-            }
-            chapters.insert(insert_pos, toc_chapter)
+            content_chs = [(j, ch) for j, ch in enumerate(chapters)
+                           if ch['title'] not in INTRO_TITLES]
+            has_volumes = any(EPUBGenerator._VOLUME_RE.match(ch['title'])
+                              for _, ch in content_chs)
+
+            if has_volumes:
+                num_toc_pages = 1
+                # Group content chapters by volume for nested HTML TOC
+                vol_groups: list = []
+                cur_vol: dict = None
+                for j, ch in content_chs:
+                    fi = j + 1 + num_toc_pages
+                    if EPUBGenerator._VOLUME_RE.match(ch['title']):
+                        if cur_vol:
+                            vol_groups.append(cur_vol)
+                        cur_vol = {'title': ch['title'], 'fi': fi, 'children': []}
+                    else:
+                        if cur_vol is not None:
+                            cur_vol['children'].append({'title': ch['title'], 'fi': fi})
+                        else:
+                            vol_groups.append({'title': ch['title'], 'fi': fi, 'children': None})
+                if cur_vol:
+                    vol_groups.append(cur_vol)
+
+                parts = ['<ol class="toc">']
+                for vg in vol_groups:
+                    if vg['children'] is None:
+                        parts.append(
+                            f'<li><a href="chapter_{vg["fi"]:03d}.xhtml">'
+                            f'{html.escape(vg["title"])}</a></li>'
+                        )
+                    else:
+                        parts.append(
+                            f'<li class="toc-vol"><a href="chapter_{vg["fi"]:03d}.xhtml">'
+                            f'{html.escape(vg["title"])}</a>'
+                        )
+                        if vg['children']:
+                            parts.append('<ol class="toc-sub">')
+                            for child in vg['children']:
+                                parts.append(
+                                    f'<li><a href="chapter_{child["fi"]:03d}.xhtml">'
+                                    f'{html.escape(child["title"])}</a></li>'
+                                )
+                            parts.append('</ol>')
+                        parts.append('</li>')
+                parts.append('</ol>')
+                toc_pages = [{'title': '目录', '_html': '\n'.join(parts), '_skip_ncx': True}]
+
+            else:
+                # Flat TOC — paginate when chapter count exceeds _TOC_PAGE_SIZE
+                items = [{'title': ch['title'], 'j': j} for j, ch in content_chs]
+                num_toc_pages = max(1, (len(items) + EPUBGenerator._TOC_PAGE_SIZE - 1)
+                                    // EPUBGenerator._TOC_PAGE_SIZE)
+                for item in items:
+                    item['fi'] = item['j'] + 1 + num_toc_pages
+                toc_pages = []
+                for pg in range(num_toc_pages):
+                    page_items = items[pg * EPUBGenerator._TOC_PAGE_SIZE:
+                                       (pg + 1) * EPUBGenerator._TOC_PAGE_SIZE]
+                    title = '目录' if pg == 0 else f'目录（续{pg}）'
+                    li = [
+                        f'<li><a href="chapter_{it["fi"]:03d}.xhtml">'
+                        f'{html.escape(it["title"])}</a></li>'
+                        for it in page_items
+                    ]
+                    toc_pages.append({
+                        'title': title,
+                        '_html': '<ol class="toc">\n' + '\n'.join(li) + '\n</ol>',
+                        '_skip_ncx': True,
+                    })
+
+            for i, tp in enumerate(toc_pages):
+                chapters.insert(insert_pos + i, tp)
 
             # 生成章节
             spine = ['nav']
             toc = []
+            _cur_vol_sec = None
+            _cur_vol_children: list = []
             css_item = epub.EpubItem(
                 uid='main-style', file_name='styles/style.css',
                 media_type='text/css',
-                content=EPUBGenerator._EPUB_CSS.encode('utf-8'),
+                content=EPUBGenerator._build_css(
+                    margin=margin, line_height=line_height,
+                    text_indent=text_indent, custom_css=custom_css,
+                ).encode('utf-8'),
             )
             book.add_item(css_item)
             for i, chapter in enumerate(chapters):
@@ -366,17 +486,40 @@ class EPUBGenerator:
                 book.add_item(epub_chapter)
                 spine.append(epub_chapter)
                 file_name = f'chapter_{i+1:03d}.xhtml'
-                if has_author_note:
-                    toc.append((
-                        epub.Section(chapter_title, href=file_name),
-                        [
-                            epub.Link(file_name, chapter_title, f'ch{i+1}'),
-                            epub.Link(f'{file_name}#author-note', '作者有话要说', f'ch{i+1}-note'),
-                        ]
-                    ))
+                if chapter.get('_skip_ncx'):
+                    pass
+                elif has_volumes:
+                    if EPUBGenerator._VOLUME_RE.match(chapter_title):
+                        if _cur_vol_sec is not None:
+                            toc.append((_cur_vol_sec, _cur_vol_children))
+                        _cur_vol_sec = epub.Section(chapter_title, href=file_name)
+                        _cur_vol_children = [epub.Link(file_name, chapter_title, f'ch{i+1}')]
+                    else:
+                        if has_author_note:
+                            link = (epub.Section(chapter_title, href=file_name),
+                                    [epub.Link(file_name, chapter_title, f'ch{i+1}'),
+                                     epub.Link(f'{file_name}#author-note', '作者有话要说',
+                                               f'ch{i+1}-note')])
+                        else:
+                            link = epub.Link(file_name, chapter_title, f'ch{i+1}')
+                        if _cur_vol_sec is not None:
+                            _cur_vol_children.append(link)
+                        else:
+                            toc.append(link)
                 else:
-                    toc.append(epub.Link(file_name, chapter_title, f'ch{i+1}'))
+                    if has_author_note:
+                        toc.append((
+                            epub.Section(chapter_title, href=file_name),
+                            [
+                                epub.Link(file_name, chapter_title, f'ch{i+1}'),
+                                epub.Link(f'{file_name}#author-note', '作者有话要说', f'ch{i+1}-note'),
+                            ]
+                        ))
+                    else:
+                        toc.append(epub.Link(file_name, chapter_title, f'ch{i+1}'))
 
+            if has_volumes and _cur_vol_sec is not None:
+                toc.append((_cur_vol_sec, _cur_vol_children))
             book.add_item(epub.EpubNcx())
             book.add_item(epub.EpubNav())
             book.spine = spine

@@ -259,10 +259,16 @@ class EpubReq(BaseModel):
     path: str
     title: str = ""
     author: str = ""
+    description: str = ""
+    publisher: str = ""
     cover_image: str = ""
     cover_url: str = ""
     auto_search_cover: bool = False
     filter_ads: bool = True
+    margin: str = "0 4%"
+    line_height: float = 1.8
+    text_indent: str = "2em"
+    custom_css: str = ""
 
 
 @app.post("/api/epub")
@@ -283,6 +289,8 @@ async def api_epub(req: EpubReq):
         epub_path = EPUBGenerator.txt_to_epub(
             cur, None, req.title, req.author,
             req.cover_image or None, req.auto_search_cover, req.cover_url or None,
+            req.description, req.publisher,
+            req.margin, req.line_height, req.text_indent, req.custom_css,
         )
         if not epub_path:
             raise RuntimeError("EPUB 生成失败")
@@ -424,6 +432,29 @@ async def save_adfilter_rules(req: AdFilterRulesReq):
     with open(AD_RULES_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return {"ok": True, "file_path": AD_RULES_FILE}
+
+
+class AdScanReq(BaseModel):
+    path: str
+
+
+@app.post("/api/adfilter/scan")
+async def api_adfilter_scan(req: AdScanReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        rules = _get_ad_rules()
+        return _AdFilter.scan_content(
+            content,
+            threshold=rules.get('threshold', 0.68),
+            hard_kw=rules.get('hard_kw'),
+            soft_kw=rules.get('soft_kw'),
+        )
+
+    return {'suspicious': await loop.run_in_executor(executor, _run)}
 
 
 # ── 章节识别规则 ───────────────────────────────────────────────

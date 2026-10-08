@@ -742,6 +742,53 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
+      <!-- 排版样式（可折叠） -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
+             @click="epubStyleOpen=!epubStyleOpen">
+          <span class="lbl" style="margin:0;">排版样式</span>
+          <span style="font-size:11px; color:var(--dim);"
+                x-text="epubStyleOpen?'收起 ▲':'展开 ▼'"></span>
+        </div>
+        <div x-show="epubStyleOpen" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; gap:20px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:120px;">
+              <span class="sublbl">页面边距</span>
+              <select class="inp" x-model="epubMargin">
+                <option value="0 2%">窄（2%）</option>
+                <option value="0 4%">标准（4%）</option>
+                <option value="0 6%">宽（6%）</option>
+                <option value="0 8%">超宽（8%）</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:120px;">
+              <span class="sublbl">行间距</span>
+              <select class="inp" x-model.number="epubLineHeight">
+                <option value="1.5">紧凑（1.5）</option>
+                <option value="1.8">标准（1.8）</option>
+                <option value="2.0">舒适（2.0）</option>
+                <option value="2.2">宽松（2.2）</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:120px;">
+              <span class="sublbl">首行缩进</span>
+              <select class="inp" x-model="epubTextIndent">
+                <option value="0">无缩进</option>
+                <option value="1em">1 字</option>
+                <option value="2em">2 字（标准）</option>
+                <option value="2.5em">2.5 字</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <span class="sublbl">自定义 CSS（追加到末尾）</span>
+            <textarea class="inp" x-model="epubCustomCss" rows="4"
+                      placeholder="span.dlg-cn { color: #4a6fa5; }&#10;span.dlg-sq { font-style: italic; }"
+                      style="font-family:'JetBrains Mono',monospace; font-size:12px; resize:vertical;"></textarea>
+          </div>
+        </div>
+      </div>
+
       <div style="display:flex; align-items:center; gap:16px; justify-content:flex-end;">
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
@@ -880,6 +927,52 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">广告过滤规则</h1>
         <p style="color:var(--muted);">配置关键词列表与匹配分值阈值，设置全局生效</p>
+      </div>
+
+      <!-- 广告扫描 -->
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">扫描广告（预览，不删除）</span>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <input class="inp" type="text" x-model="adScanPath"
+                 placeholder="/Users/…/novel.txt"
+                 @keydown.enter="doAdScan()">
+          <button class="btn btn-ghost" @click="browseFile('adScan')">浏览</button>
+          <button class="btn btn-amber" @click="doAdScan()" :disabled="adScanWorking||!adScanPath">
+            <span x-show="adScanWorking" class="spin"></span>
+            <span x-text="adScanWorking?'扫描中…':'扫描'"></span>
+          </button>
+        </div>
+        <div x-show="adScanDone && adScanResults.length===0"
+             style="font-size:12px; color:var(--muted); padding:4px 0;">
+          未发现可疑行（当前阈值 <span x-text="adThreshold"></span>）
+        </div>
+        <div x-show="adScanResults.length>0" style="max-height:280px; overflow-y:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--dim);">
+                <th style="text-align:left; padding:4px 6px; width:52px;">行号</th>
+                <th style="text-align:left; padding:4px 6px; width:52px;">得分</th>
+                <th style="text-align:left; padding:4px 6px;">内容</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in adScanResults" :key="r.line_num">
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:4px 6px; color:var(--dim); font-variant-numeric:tabular-nums;"
+                      x-text="r.line_num"></td>
+                  <td style="padding:4px 6px; font-variant-numeric:tabular-nums;"
+                      :style="r.score>=0.85?'color:#f87171':r.score>=0.7?'color:#fb923c':'color:var(--muted)'"
+                      x-text="r.score.toFixed(2)"></td>
+                  <td style="padding:4px 6px; color:var(--text); word-break:break-all;"
+                      x-text="r.text.slice(0,80)+(r.text.length>80?'…':'')"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <p style="font-size:11px; color:var(--dim); margin-top:6px;">
+            共 <span x-text="adScanResults.length"></span> 行可疑内容
+          </p>
+        </div>
       </div>
 
       <!-- 强匹配关键词 -->
@@ -1341,6 +1434,9 @@ function app() {
     epubTitleEdited:false, epubAuthorEdited:false,
     epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false,
     epubCatalogOpen:false,
+    epubStyleOpen:false,
+    epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
+    adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
     coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
     _epubResolve:null,
     coverOptions:[
@@ -1519,6 +1615,7 @@ function app() {
       if (target==='convert') { this.convertPath=r.path; await this.onConvertFileChange() }
       if (target==='epub')    { this.epubPath=r.path;    await this.onEpubFileChange() }
       if (target==='catalog') this.catalogPath=r.path
+      if (target==='adScan')  this.adScanPath=r.path
     },
     async browseDir() {
       const r = await this.post('/api/dialog', { mode:'dir', title:'选择文件夹' })
@@ -1634,6 +1731,8 @@ function app() {
           path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
           cover_image: coverImage||'', cover_url: coverUrl||'', auto_search_cover:false,
           filter_ads:this.filterAds,
+          margin:this.epubMargin, line_height:this.epubLineHeight,
+          text_indent:this.epubTextIndent, custom_css:this.epubCustomCss,
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
         this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true
@@ -1658,6 +1757,18 @@ function app() {
     cancelCover() {
       if (this._epubResolve) this._epubResolve('cancel')
       this._epubResolve = null
+    },
+
+    async doAdScan() {
+      if (!this.adScanPath || this.adScanWorking) return
+      this.adScanWorking = true; this.adScanResults = []; this.adScanDone = false
+      try {
+        const r = await this.post('/api/adfilter/scan', {path: this.adScanPath})
+        this.adScanResults = r.suspicious || []; this.adScanDone = true
+      } catch(e) {
+        this.toast('扫描失败', e.message, false)
+      }
+      this.adScanWorking = false
     },
 
     async doLoadCatalog() {
