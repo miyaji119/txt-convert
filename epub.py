@@ -282,17 +282,17 @@ class EPUBGenerator:
             if not current:
                 return
             text = ''.join(current)
-            stripped = text.strip()
-            if EPUBGenerator._SCENE_BREAK_PAT.match(stripped) and stripped:
-                paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
-            else:
-                paragraphs.append(f'<p>{EPUBGenerator._apply_dialogue_spans(text)}</p>')
+            paragraphs.append(f'<p>{EPUBGenerator._apply_dialogue_spans(text)}</p>')
             current.clear()
 
         for line in content.split('\n'):
             line = line.strip()
             if line:
-                current.append(html.escape(line, quote=True))
+                if EPUBGenerator._SCENE_BREAK_PAT.match(line):
+                    _flush()
+                    paragraphs.append(f'<p class="scene-break">{html.escape(line)}</p>')
+                else:
+                    current.append(html.escape(line, quote=True))
             else:
                 _flush()
         _flush()
