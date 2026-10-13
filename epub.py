@@ -32,12 +32,76 @@ class EPUBGenerator:
 
     _SCENE_BREAK_PAT = re.compile(r'^[\*＊·•\s]+$')
 
-    # 对话引号识别：中文 "..." 和角括号 「...」 『...』
-    _DLG_PATS = [
-        (re.compile(r'“[^”]{0,400}”'), 'dlg-cn'),
-        (re.compile(r'「[^」]{0,400}」'), 'dlg-sq'),
-        (re.compile(r'『[^』]{0,400}』'), 'dlg-sq'),
+    # 默认样式预设：scope=inline 包裹 span，scope=block 给整段加 class
+    DEFAULT_STYLE_PRESETS = [
+        {
+            "key": "dlg-cn",  "name": "双引号对话", "scope": "inline",
+            "regex": "\u201c[^\u201d]{0,400}\u201d", "enabled": True,
+            "color": "", "font_size": "", "font_style": "",
+        },
+        {
+            "key": "dlg-sq",  "name": "角括号对话", "scope": "inline",
+            "regex": r"「[^」]{0,400}」", "enabled": True,
+            "color": "", "font_size": "", "font_style": "",
+        },
+        {
+            "key": "dlg-dbl", "name": "双角括号",   "scope": "inline",
+            "regex": r"『[^』]{0,400}』", "enabled": True,
+            "color": "", "font_size": "", "font_style": "",
+        },
+        {
+            "key": "dlg-sq2", "name": "单引号对话", "scope": "inline",
+            "regex": "\u2018[^\u2019]{0,400}\u2019", "enabled": True,
+            "color": "", "font_size": "", "font_style": "",
+        },
     ]
+    @staticmethod
+    def compile_styles(presets: list):
+        """预编译样式预设，返回 (inline_pats, block_pats)。
+
+        inline_pats: [(compiled_re, css_key)]
+        block_pats:  [(compiled_re, css_key)]
+        """
+        inline_pats, block_pats = [], []
+        for p in presets:
+            if not p.get('enabled', True):
+                continue
+            try:
+                rx = re.compile(p['regex'])
+            except re.error:
+                continue
+            target = inline_pats if p.get('scope', 'inline') == 'inline' else block_pats
+            target.append((rx, p['key']))
+        return inline_pats, block_pats
+
+    # 缓存默认预设的编译结果
+    _DEFAULT_INLINE_PATS = None
+    _DEFAULT_BLOCK_PATS  = None
+
+    @classmethod
+    def _default_inline_pats(cls):
+        if cls._DEFAULT_INLINE_PATS is None:
+            cls._DEFAULT_INLINE_PATS, cls._DEFAULT_BLOCK_PATS = cls.compile_styles(
+                cls.DEFAULT_STYLE_PRESETS)
+        return cls._DEFAULT_INLINE_PATS
+
+    @classmethod
+    def _default_block_pats(cls):
+        if cls._DEFAULT_BLOCK_PATS is None:
+            cls._DEFAULT_INLINE_PATS, cls._DEFAULT_BLOCK_PATS = cls.compile_styles(
+                cls.DEFAULT_STYLE_PRESETS)
+        return cls._DEFAULT_BLOCK_PATS
+
+    # 保留旧 _DLG_PATS 兼容性（现在由 DEFAULT_STYLE_PRESETS 生成）
+    _DLG_PATS = [
+        (re.compile(r'“[^”]{0,400}”'),             'dlg-cn'),
+        (re.compile(r'「[^」]{0,400}」'),           'dlg-sq'),
+        (re.compile(r'『[^』]{0,400}』'),           'dlg-sq'),
+        (re.compile('‘[^’]{0,400}’'), 'dlg-sq2'),
+    ]
+
+    # 默认对话样式（空 = 不生成 CSS，由 custom_css 或用户自定义）
+    DIALOG_STYLE_DEFAULTS: dict = {}
 
     _TOC_PAGE_SIZE = 20
 
@@ -48,8 +112,10 @@ class EPUBGenerator:
     _CSS_TEMPLATE = (
         '@charset "UTF-8";'
         'body{{font-family:"Noto Serif CJK SC","Source Han Serif SC","思源宋体","STSong","SimSun","宋体",serif;'
-        'font-size:1em;margin:{margin};color:#1c1c1c;word-break:break-all;overflow-wrap:break-word;'
+        'font-size:1em;margin:0;color:#1c1c1c;word-break:break-all;overflow-wrap:break-word;'
         '-webkit-hyphens:none;hyphens:none}}'
+        # .content 用百分比边距，不随阅读器字号膨胀
+        '.content{{margin:{margin}}}'
         'h1{{font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
         'margin:2em 0 1.8em;padding-bottom:.6em;border-bottom:1px solid #c0c0c0;letter-spacing:.08em}}'
         'h2{{font-size:.92em;font-weight:normal;text-align:center;margin-top:3em;'
@@ -63,14 +129,55 @@ class EPUBGenerator:
         '.toc a:hover{{text-decoration:underline}}'
         '.toc-vol>a{{font-weight:600;color:#1a1a1a}}'
         '.toc-sub{{margin-left:1.5em;list-style:none}}'
+        '.dropcap{{float:left;font-size:3em;line-height:.8;margin:.05em .08em 0 0;font-weight:bold}}'
+        'aside[epub|type="footnote"]{{font-size:.85em;color:#555;border-top:1px solid #e0e0e0;margin-top:2em;padding-top:.5em}}'
+        'a[epub|type="noteref"]{{vertical-align:super;font-size:.75em;text-decoration:none;color:#888}}'
+        '.header-img{{margin:0;margin-bottom:1em}}.header-img img{{width:100%;display:block}}'
+        '.fullpage{{text-align:center;padding:0;margin:0}}'
+        '.fullpage img{{max-width:100%;max-height:100vh;display:block;margin:auto}}'
     )
 
     @classmethod
     def _build_css(cls, margin: str = "0 4%", line_height: float = 1.8,
-                   text_indent: str = "2em", custom_css: str = "") -> str:
+                   text_indent: str = "2em", custom_css: str = "",
+                   dialog_styles: dict = None,
+                   style_presets: list = None) -> str:
         css = cls._CSS_TEMPLATE.format(
             margin=margin, line_height=line_height, text_indent=text_indent
         )
+        # 从 style_presets 生成 span/block CSS（优先于旧 dialog_styles）
+        presets = style_presets if style_presets is not None else cls.DEFAULT_STYLE_PRESETS
+        seen_keys: set = set()
+        for p in presets:
+            if not p.get('enabled', True):
+                continue
+            key = p['key']
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            rules = []
+            if p.get('color'):
+                rules.append(f'color:{p["color"]}')
+            if p.get('font_size'):
+                rules.append(f'font-size:{p["font_size"]}')
+            if p.get('font_style'):
+                rules.append(f'font-style:{p["font_style"]}')
+            if rules:
+                css += f'span.{key}{{{";".join(rules)}}}'
+        # 向后兼容：若传了旧 dialog_styles，补充 style_presets 没覆盖到的 key
+        _ds = dialog_styles if dialog_styles is not None else cls.DIALOG_STYLE_DEFAULTS
+        for cls_name, props in _ds.items():
+            if cls_name in seen_keys:
+                continue
+            rules = []
+            if props.get('color'):
+                rules.append(f'color:{props["color"]}')
+            if props.get('font_size'):
+                rules.append(f'font-size:{props["font_size"]}')
+            if props.get('font_style'):
+                rules.append(f'font-style:{props["font_style"]}')
+            if rules:
+                css += f'span.{cls_name}{{{";".join(rules)}}}'
         return css + (custom_css or '')
 
     @staticmethod
@@ -182,15 +289,17 @@ class EPUBGenerator:
         return merged
 
     @staticmethod
-    def _apply_dialogue_spans(text: str) -> str:
+    def _apply_dialogue_spans(text: str, inline_pats=None) -> str:
         """将对话引号内容包裹在 span 中，供 CSS 自定义样式。"""
-        for pat, cls in EPUBGenerator._DLG_PATS:
+        pats = inline_pats if inline_pats is not None else EPUBGenerator._DLG_PATS
+        for pat, cls in pats:
             text = pat.sub(lambda m, c=cls: f'<span class="{c}">{m.group(0)}</span>', text)
         return text
 
     @staticmethod
     def _parse_chapters(content: str) -> List[dict]:
         """解析章节结构（使用 ChapterAnalyzer 统一识别）"""
+        content = ChapterAnalyzer.fix_broken_numbering(content)
         structure = ChapterAnalyzer.analyze_chapter_structure(content)
         lines = content.split('\n')
         chapters = []
@@ -271,31 +380,70 @@ class EPUBGenerator:
             cleaned.pop()
         return '\n'.join(cleaned)
 
+    _NOTE_RE = re.compile(r'\{\{注:(.*?)\}\}')
+
     @staticmethod
-    def _chapter_to_html(content: str) -> str:
+    def _chapter_to_html(content: str, drop_cap: bool = False, ch_idx: int = 0,
+                         inline_pats=None, block_pats=None) -> str:
         content = EPUBGenerator._clean_chapter_content(content)
         content = EPUBGenerator._merge_dialogue_splits(content)
         paragraphs = []
         current = []
+        noind = [False]
+        notes: list = []   # 收集脚注 [(k, note_text)]
+
+        def _note_sub(m):
+            k = len(notes) + 1
+            notes.append((k, m.group(1)))
+            return (f'<a epub:type="noteref" href="#fn_{ch_idx}_{k}"'
+                    f' id="fnref_{ch_idx}_{k}">[注{k}]</a>')
 
         def _flush():
             if not current:
                 return
             text = ''.join(current)
-            paragraphs.append(f'<p>{EPUBGenerator._apply_dialogue_spans(text)}</p>')
+            cls = ' class="noind"' if noind[0] else ''
+            # block scope：若整段匹配某个 block_pats 规则，给 <p> 加额外 class
+            if block_pats and not noind[0]:
+                for rx, bkey in (block_pats or []):
+                    if rx.search(text):
+                        cls = f' class="{bkey}"'
+                        break
+            paragraphs.append(f'<p{cls}>{EPUBGenerator._apply_dialogue_spans(text, inline_pats)}</p>')
             current.clear()
+            noind[0] = False
 
         for line in content.split('\n'):
-            line = line.strip()
-            if line:
-                if EPUBGenerator._SCENE_BREAK_PAT.match(line):
+            stripped = line.strip()
+            if stripped:
+                if EPUBGenerator._SCENE_BREAK_PAT.match(stripped):
                     _flush()
-                    paragraphs.append(f'<p class="scene-break">{html.escape(line)}</p>')
+                    paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
                 else:
-                    current.append(html.escape(line, quote=True))
+                    if not current:  # 段落第一行：检测是否有手动缩进
+                        noind[0] = line.startswith(('　', ' '))
+                    line_escaped = html.escape(stripped, quote=True)
+                    line_escaped = EPUBGenerator._NOTE_RE.sub(_note_sub, line_escaped)
+                    current.append(line_escaped)
             else:
                 _flush()
         _flush()
+        if drop_cap and paragraphs:
+            for idx, p in enumerate(paragraphs):
+                if p.startswith('<p>') and len(p) > 4:
+                    inner = p[3:-4]
+                    if inner and inner[0] not in ('<', '&'):
+                        paragraphs[idx] = (f'<p><span class="dropcap">{inner[0]}</span>'
+                                           f'{inner[1:]}</p>')
+                        break
+        if notes:
+            asides = []
+            for k, note_text in notes:
+                asides.append(
+                    f'<aside epub:type="footnote" id="fn_{ch_idx}_{k}">'
+                    f'<p><a href="#fnref_{ch_idx}_{k}">[注{k}]</a> {note_text}</p></aside>'
+                )
+            paragraphs.append('\n'.join(asides))
         return '\n'.join(paragraphs)
 
     @staticmethod
@@ -303,7 +451,15 @@ class EPUBGenerator:
                     cover_image: str = None, auto_search_cover: bool = False, cover_url: str = None,
                     description: str = "", publisher: str = "",
                     margin: str = "0 4%", line_height: float = 1.8,
-                    text_indent: str = "2em", custom_css: str = "") -> Optional[str]:
+                    text_indent: str = "2em", custom_css: str = "",
+                    dialog_styles: dict = None,
+                    isbn: str = "", pubdate: str = "", language: str = "zh",
+                    tags=None, drop_cap: bool = False,
+                    volume_map: dict = None,
+                    style_presets: list = None,
+                    header_images: list = None,
+                    fonts: dict = None,
+                    illustrations: list = None) -> Optional[str]:
         """将TXT文件转换为EPUB"""
         if not EPUB_SUPPORT:
             print("❌ EPUB生成功能不可用，请先安装ebooklib库")
@@ -315,6 +471,18 @@ class EPUBGenerator:
 
             if not chapters:
                 chapters = [{'title': book_title if book_title else "正文", 'content': content}]
+
+            # 手动卷分配：在指定章节前插入卷标题章节（_VOLUME_RE 会自动识别生成两级 TOC）
+            if volume_map:
+                result_chs = []
+                inserted_vols: set = set()
+                for ch in chapters:
+                    vol_name = volume_map.get(ch['title'])
+                    if vol_name and vol_name not in inserted_vols:
+                        result_chs.append({'title': vol_name, 'content': ''})
+                        inserted_vols.add(vol_name)
+                    result_chs.append(ch)
+                chapters = result_chs
 
             if not book_title:
                 book_title = EPUBGenerator._extract_title(content)
@@ -334,12 +502,21 @@ class EPUBGenerator:
             book = epub.EpubBook()
             book.set_identifier(f"urn:uuid:{datetime.now().strftime('%Y%m%d%H%M%S')}")
             book.set_title(book_title)
-            book.set_language('zh')
+            book.set_language(language or 'zh')
             book.add_author(author if author else "未知")
             if description:
                 book.add_metadata('DC', 'description', description)
             if publisher:
                 book.add_metadata('DC', 'publisher', publisher)
+            if isbn:
+                book.add_metadata('DC', 'identifier', isbn)
+            if pubdate:
+                book.add_metadata('DC', 'date', pubdate)
+            if tags:
+                tag_list = (tags if isinstance(tags, list)
+                            else [t.strip() for t in re.split(r'[,，、;；]', str(tags)) if t.strip()])
+                for tag in tag_list:
+                    book.add_metadata('DC', 'subject', tag)
 
             # 封面处理
             actual_cover_path = cover_image
@@ -357,6 +534,38 @@ class EPUBGenerator:
                     print(f"✅ 添加封面: {actual_cover_path}")
                 except Exception as e:
                     print(f"⚠️ 添加封面失败: {e}")
+
+            # 插图页插入（在 TOC 计算前，以正文章节序号为基准）
+            if illustrations:
+                # 构建正文章节列表（排除前言/目录）的索引映射
+                _content_idx_to_ch_idx = []
+                for _ci, _ch in enumerate(chapters):
+                    if '_html' not in _ch:
+                        _content_idx_to_ch_idx.append(_ci)
+                # 倒序插入，避免 index 偏移
+                _illust_sorted = sorted(illustrations,
+                                        key=lambda x: x.get('after_chapter', 0), reverse=True)
+                for _illi, _ill in enumerate(_illust_sorted):
+                    _after = _ill.get('after_chapter', 0)
+                    _caption = _ill.get('caption', '')
+                    _ill_path = _ill.get('path', '')
+                    if not os.path.isfile(str(_ill_path)):
+                        continue
+                    _ill_name = f'illust_{_illi}.jpg'
+                    # 找到正确的插入位置
+                    if _after < len(_content_idx_to_ch_idx):
+                        _insert_at = _content_idx_to_ch_idx[_after] + 1
+                    else:
+                        _insert_at = len(chapters)
+                    chapters.insert(_insert_at, {
+                        'title': _caption,
+                        '_html': (f'<div class="fullpage">'
+                                  f'<img src="../images/{_ill_name}" alt="{html.escape(_caption)}"/>'
+                                  f'</div>'),
+                        '_skip_ncx': not bool(_caption),
+                        '_illust_path': _ill_path,
+                        '_illust_name': _ill_name,
+                    })
 
             # 插入目录（支持多页分页及卷级两级结构）
             INTRO_TITLES = ('文案简介', '前言')
@@ -437,6 +646,18 @@ class EPUBGenerator:
                 chapters.insert(insert_pos + i, tp)
 
             # 生成章节
+            _dc_applied = [False]
+            _inline_pats, _block_pats = EPUBGenerator.compile_styles(
+                style_presets if style_presets is not None else EPUBGenerator.DEFAULT_STYLE_PRESETS
+            )
+            # 预处理头图
+            _headers: list = []
+            if header_images:
+                try:
+                    from header_image import make_header
+                    _headers = header_images if isinstance(header_images, list) else [header_images]
+                except ImportError:
+                    print("   ⚠️ header_image 模块不可用，跳过头图")
             spine = ['nav']
             toc = []
             _cur_vol_sec = None
@@ -447,18 +668,61 @@ class EPUBGenerator:
                 content=EPUBGenerator._build_css(
                     margin=margin, line_height=line_height,
                     text_indent=text_indent, custom_css=custom_css,
+                    dialog_styles=dialog_styles,
+                    style_presets=style_presets,
                 ).encode('utf-8'),
             )
             book.add_item(css_item)
+
+            # 字体子集化（fontTools）
+            if fonts:
+                try:
+                    import tempfile
+                    from font_subset import process_fonts
+                    _font_ext_map = {"ttf": "font/ttf", "otf": "font/otf",
+                                     "woff": "font/woff", "woff2": "font/woff2"}
+                    with tempfile.TemporaryDirectory() as _ftmp:
+                        _font_items = process_fonts(fonts, chapters, _ftmp)
+                        _font_css = ''
+                        for fi in _font_items:
+                            _ext = fi['filename'].rsplit('.', 1)[-1].lower()
+                            _mt = _font_ext_map.get(_ext, 'application/octet-stream')
+                            book.add_item(epub.EpubItem(
+                                uid=f"font-{fi['role']}",
+                                file_name=f"fonts/{fi['filename']}",
+                                media_type=_mt, content=fi['bytes'],
+                            ))
+                            _font_css += fi['css']
+                    if _font_css:
+                        # 把 @font-face 前置到 CSS
+                        css_item.content = (_font_css + css_item.content.decode('utf-8')).encode('utf-8')
+                except ImportError:
+                    print("   ⚠️ font_subset 模块不可用，跳过字体嵌入")
             for i, chapter in enumerate(chapters):
                 chapter_title = chapter['title']
                 has_author_note = False
                 if '_html' in chapter:
                     html_content = chapter['_html']
                     body_type = 'frontmatter toc'
+                    # 插图页：把图片添加到 book
+                    if chapter.get('_illust_path') and os.path.isfile(chapter['_illust_path']):
+                        _ill_ext = os.path.splitext(chapter['_illust_path'])[1].lower()
+                        _ill_mt = 'image/png' if _ill_ext == '.png' else 'image/jpeg'
+                        with open(chapter['_illust_path'], 'rb') as _f:
+                            book.add_item(epub.EpubItem(
+                                uid=f"illust-{i}",
+                                file_name=f"images/{chapter['_illust_name']}",
+                                media_type=_ill_mt, content=_f.read(),
+                            ))
                 else:
                     main_content, note_body = EPUBGenerator._split_author_note(chapter['content'])
-                    html_content = EPUBGenerator._chapter_to_html(main_content)
+                    _use_dc = drop_cap and not _dc_applied[0] and chapter['title'] not in INTRO_TITLES
+                    html_content = EPUBGenerator._chapter_to_html(
+                        main_content, drop_cap=_use_dc, ch_idx=i,
+                        inline_pats=_inline_pats, block_pats=_block_pats,
+                    )
+                    if _use_dc:
+                        _dc_applied[0] = True
                     body_type = 'bodymatter chapter'
                     if note_body is not None:
                         has_author_note = True
@@ -467,6 +731,24 @@ class EPUBGenerator:
                             '\n<h2 id="author-note">作者有话要说</h2>\n' + note_html
                         )
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
+                # 头图（仅正文章节，按轮换索引选取）
+                header_html = ''
+                if _headers and '_html' not in chapter:
+                    h_cfg = _headers[i % len(_headers)]
+                    h_path = h_cfg.get('path', h_cfg) if isinstance(h_cfg, dict) else h_cfg
+                    h_edge = h_cfg.get('edge', 'fade') if isinstance(h_cfg, dict) else 'fade'
+                    h_name = f'header_{i % len(_headers)}.jpg'
+                    if os.path.isfile(str(h_path)):
+                        from header_image import make_header as _make_header
+                        h_bytes = _make_header(str(h_path), h_edge)
+                        if h_bytes:
+                            h_item = epub.EpubItem(
+                                uid=f'hdr-{i % len(_headers)}',
+                                file_name=f'images/{h_name}',
+                                media_type='image/jpeg', content=h_bytes,
+                            )
+                            book.add_item(h_item)
+                            header_html = f'<div class="header-img"><img src="../images/{h_name}" alt=""/></div>\n'
                 epub_chapter.content = (
                     '<?xml version="1.0" encoding="UTF-8"?>\n'
                     '<!DOCTYPE html>\n'
@@ -478,8 +760,11 @@ class EPUBGenerator:
                     '  <link rel="stylesheet" type="text/css" href="styles/style.css"/>\n'
                     '</head>\n'
                     f'<body epub:type="{body_type}">\n'
+                    f'{header_html}'
+                    '<div class="content">\n'
                     f'<h1>{chapter_title}</h1>\n'
                     f'{html_content}\n'
+                    '</div>\n'
                     '</body>\n'
                     '</html>'
                 ).encode('utf-8')

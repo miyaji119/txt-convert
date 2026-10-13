@@ -2,6 +2,7 @@
 
 import bisect
 import re
+from collections import Counter, defaultdict
 from typing import Dict
 
 from chapter_config import ChapterConfig
@@ -152,10 +153,13 @@ class ChapterAnalyzer:
     # 章节结构分析
     # ------------------------------------------------------------------
     @staticmethod
-    def analyze_chapter_structure(content: str, config_name: str = 'default') -> Dict:
+    def analyze_chapter_structure(content: str, config_name: str = 'default',
+                                  extra_patterns: list = None) -> Dict:
         """分析章节结构"""
         config = ChapterConfig(config_name)
         chapter_patterns = config.CHAPTER_PATTERNS
+        if extra_patterns:
+            chapter_patterns = [(p, 'custom') for p in extra_patterns] + chapter_patterns
         filter_rules = config.FILTER_RULES
 
         lines = content.split('\n')
@@ -226,3 +230,56 @@ class ChapterAnalyzer:
             'chapters': chapters
         }
 
+    # ------------------------------------------------------------------
+    # 章节编号修复
+    # ------------------------------------------------------------------
+    # 匹配"第X章/节/回/卷 标题"，X 可为中文或阿拉伯数字
+    _BROKEN_NUM_RE = re.compile(
+        r'^(第[零一二三四五六七八九十百千万两\d]+([章节回卷]))[：:，,\s]*(.*?)$'
+    )
+
+    @staticmethod
+    def fix_broken_numbering(content: str) -> str:
+        """检测并修正批量重复的章节编号。
+
+        当同一章节编号前缀（如"第一章"）出现 ≥3 次、占全书章节 ≥30%，
+        且这些重复行拥有多个不同标题时，视为编号错误，
+        按出现顺序统一改写为第1章、第2章……
+        """
+        lines = content.split('\n')
+        # (行下标, 完整前缀如"第一章", 单位字如"章", 后续标题文字)
+        ch_lines: list = []
+        for i, line in enumerate(lines):
+            m = ChapterAnalyzer._BROKEN_NUM_RE.match(line.strip())
+            if m:
+                ch_lines.append((i, m.group(1), m.group(2), m.group(3).strip()))
+
+        if len(ch_lines) < 3:
+            return content
+
+        prefix_counts: Counter = Counter(c[1] for c in ch_lines)
+        most_common_prefix, most_common_count = prefix_counts.most_common(1)[0]
+
+        # 条件1：同一前缀出现 ≥3 次，且占全部章节 ≥30%
+        if most_common_count < 3 or most_common_count < len(ch_lines) * 0.3:
+            return content
+
+        # 条件2：重复编号下的标题各不相同（真实的分章，而非抓取断点重复）
+        prefix_to_titles: defaultdict = defaultdict(set)
+        for _i, prefix, _unit, title_body in ch_lines:
+            prefix_to_titles[prefix].add(title_body)
+        if len(prefix_to_titles[most_common_prefix]) <= 1:
+            return content  # 同号同题 → 真实重复章节，交由 _merge_duplicate_chapters 处理
+
+        print(f"   ⚠️ 检测到重复章节编号（{most_common_prefix} 出现 {most_common_count} 次），"
+              f"自动修正为顺序编号")
+
+        new_lines = list(lines)
+        for seq, (i, _prefix, unit_char, title_body) in enumerate(ch_lines, 1):
+            new_prefix = f"第{seq}{unit_char}"
+            new_title = f"{new_prefix} {title_body}" if title_body else new_prefix
+            orig = lines[i]
+            leading = len(orig) - len(orig.lstrip())
+            new_lines[i] = orig[:leading] + new_title
+
+        return '\n'.join(new_lines)

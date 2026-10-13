@@ -6,6 +6,70 @@ import json
 from typing import Optional, Dict, List, Tuple
 
 from encoding import EncodingDetector
+from chapter import ChapterAnalyzer
+
+
+def _arabic_to_chinese(n: int) -> str:
+    """阿拉伯数字 → 中文章节序数（支持 1–9999）。如 12 → '十二'，42 → '四十二'。"""
+    if n <= 0:
+        return str(n)
+    digits = '零一二三四五六七八九'
+    units  = ['', '十', '百', '千']
+    s = str(n)
+    length = len(s)
+    result = ''
+    prev_zero = False
+    for i, ch in enumerate(s):
+        d = int(ch)
+        pos = length - 1 - i
+        if d == 0:
+            prev_zero = True
+        else:
+            if prev_zero and result:
+                result += '零'
+            result += digits[d] + (units[pos] if pos < len(units) else '')
+            prev_zero = False
+    if result.startswith('一十'):  # 十一 而非 一十一
+        result = result[1:]
+    return result
+
+
+_NUM_FIRST_RE   = re.compile(r'^(\d{1,4})[、，,\.\s]+(.*)$')
+_STANDARD_CH_RE = re.compile(r'^第[零一二三四五六七八九十百千万两\d]+[章节回卷]')
+
+
+def normalize_numeric_chapters(content: str) -> Tuple[str, List[dict]]:
+    """将纯数字格式的章节标题转为「第X章」格式。
+
+    仅处理已被 ChapterAnalyzer 识别为章节标题、且尚未是「第X章」格式的行。
+    返回 (修改后的文本, 变更列表)，变更列表每项为 {line_num, original, normalized}。
+    """
+    structure = ChapterAnalyzer.analyze_chapter_structure(content)
+    lines = content.split('\n')
+    ch_map = {ch['start_line']: ch for ch in structure.get('chapters', [])}
+    changes: List[dict] = []
+
+    for i, line in enumerate(lines):
+        line_num = i + 1
+        if line_num not in ch_map:
+            continue
+        stripped = line.strip()
+        if _STANDARD_CH_RE.match(stripped):
+            continue  # 已是标准格式，跳过
+        m = _NUM_FIRST_RE.match(stripped)
+        if not m:
+            continue
+        ch = ch_map[line_num]
+        num = ch.get('number') or int(m.group(1))
+        title_text = (ch.get('title') or m.group(2)).strip()
+        normalized = '第{}章'.format(_arabic_to_chinese(num))
+        if title_text:
+            normalized += ' ' + title_text
+        if normalized != stripped:
+            changes.append({'line_num': line_num, 'original': stripped, 'normalized': normalized})
+            lines[i] = normalized
+
+    return '\n'.join(lines), changes
 from display import DirectoryDisplay
 from chapter import ChapterAnalyzer
 from adfilter import AdFilter
@@ -120,6 +184,12 @@ class EasyPubOptimizer:
                     })
                     optimized_lines.extend(['', standard_line, ''])
                     in_paragraph = False
+                    # 跳过正文中紧跟章节标题完全相同的第一行
+                    _next = i + 1
+                    while _next < len(lines) and not lines[_next].strip():
+                        _next += 1
+                    if _next < len(lines) and lines[_next].strip() in (standard_line, chapter_title):
+                        lines[_next] = ''
                     break
 
             if not is_chapter:
@@ -146,7 +216,39 @@ class EasyPubOptimizer:
         return optimized_text, {'total_chapters': total_chapters, 'chapters': chapters, 'total_lines': len(optimized_lines), 'total_chars': len(optimized_text)}
 
 
-def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True, ignore_mismatch: bool = False, filter_ads: bool = True, ad_rules: dict = None) -> Tuple[Optional[str], Optional[Dict]]:
+def _normalize_punctuation(text: str) -> str:
+    """标点规范化：直引号→弯引号、...→……、~→～、不间断空格→普通空格"""
+    # \xa0 和全角空格 → 普通空格
+    text = text.replace('\xa0', ' ').replace('　', ' ')
+
+    # 三个及以上连续英文点 → 省略号（先处理长串再处理三点）
+    text = re.sub(r'\.{3,}', '……', text)
+
+    # 半角波浪号 → 全角（只转孤立的 ~，不动 ~~~ 装饰行，那由 adfilter 处理）
+    text = re.sub(r'(?<![~])~(?![~])', '～', text)
+
+    # 英文直双引号 → 中文弯引号（按奇偶切换）
+    def _replace_double(m):
+        _replace_double.count += 1
+        return '“' if _replace_double.count % 2 == 1 else '”'
+    _replace_double.count = 0
+    text = re.sub(r'"', _replace_double, text)
+
+    # 英文直单引号 → 中文弯引号（跳过缩写中的撇号：don't、it's 等）
+    def _replace_single(m):
+        before, after = m.group(1), m.group(3)
+        # 夹在字母之间 → 撇号，保持原样
+        if re.match(r'[A-Za-z]', before or '') and re.match(r'[A-Za-z]', after or ''):
+            return m.group(0)
+        _replace_single.count += 1
+        return '‘' if _replace_single.count % 2 == 1 else '’'
+    _replace_single.count = 0
+    text = re.sub(r"(.?)(')(.?)", _replace_single, text)
+
+    return text
+
+
+def convert_for_easypub(input_file: str, output_file: str = None, book_title: str = "", author: str = "", show_catalog: bool = True, ignore_mismatch: bool = False, filter_ads: bool = True, ad_rules: dict = None, normalize_punct: bool = True) -> Tuple[Optional[str], Optional[Dict]]:
     if output_file is None:
         base_name = os.path.splitext(input_file)[0]
         output_file = f"{base_name}_epub_ready.txt"
@@ -160,6 +262,11 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
     except Exception as e:
         print(f"   ❌ 无法读取文件: {e}")
         return None, None
+
+    if normalize_punct:
+        content = _normalize_punctuation(content)
+
+    content = ChapterAnalyzer.fix_broken_numbering(content)
 
     if filter_ads:
         _rules = ad_rules or {}

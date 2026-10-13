@@ -21,7 +21,8 @@ class AdFilter:
 
     _PLATFORM_RE = re.compile(
         r'(笔趣阁|起点|晋江|纵横|17k|腾讯|阅文|番茄|米读|七猫|掌阅|多看|po18|jjwxc'
-        r'|笔力阅读|阅笔小说|润文网|书趣网|新笔趣阁|顶点小说|飞卢小说|爱好中文)'
+        r'|笔力阅读|阅笔小说|润文网|书趣网|新笔趣阁|顶点小说|飞卢小说|爱好中文'
+        r'|biliyd|yoabc)'
         r'.{0,6}(小说|阅读|文学|网|app)',
         re.I,
     )
@@ -31,6 +32,7 @@ class AdFilter:
         re.compile(r'想看更多.{0,20}(小说|访问|请)',          re.I),
         re.compile(r'最新章节.{0,15}(更新|请到|请访)',         re.I),
         re.compile(r'更多好看的(文章|小说)',                   re.I),
+        re.compile(r'最新最全的小说',                          re.I),
         re.compile(r'求(月票|推荐票|鲜花|评价票)',             re.I),
         re.compile(r'(本书|全书|全文).{0,6}(首发|发布).{0,10}(网|站|阁|楼)',  re.I),
         re.compile(r'(欢迎|请).{0,4}(访问|关注).{0,10}(网|站|com|net)', re.I),
@@ -44,8 +46,8 @@ class AdFilter:
         '阅读网', '小说网', '全文阅读', '免费全文', '书城',
         '关注.*获取', '加入书架',
         '内容版权归', '不做任何负责', '免费日更',
-        # 作者拉票（从 kasaki AD_PRESETS 补充）
-        '求月票', '求推荐票', '求打赏', '求鲜花', '求评价票',
+        # 作者拉票
+        '求月票', '求推荐票', '求打赏', '求鲜花', '求评价票', '求收藏',
         # 站点推广
         '欢迎访问', '在线阅读全文', '全本TXT下载', '更多好书', '手机阅读',
         # 联系方式
@@ -169,6 +171,20 @@ class AdFilter:
                 run_start = None
         if run_start is not None and (n - run_start) >= 3:
             removed.update(range(run_start, n))
+
+        # 连续 3 行以上的纯符号装饰行（如 ~~~~~、*****、=====）→ 整块删除
+        _PURE_SYMBOL_RE = re.compile(r'^[~＊*=\-_+#@^&]{5,}\s*$')
+        sym_run_start = None
+        for i, line in enumerate(lines):
+            if _PURE_SYMBOL_RE.match(line.strip()):
+                if sym_run_start is None:
+                    sym_run_start = i
+            else:
+                if sym_run_start is not None and (i - sym_run_start) >= 3:
+                    removed.update(range(sym_run_start, i))
+                sym_run_start = None
+        if sym_run_start is not None and (n - sym_run_start) >= 3:
+            removed.update(range(sym_run_start, n))
 
         # 保留章节标题行（防止误删）；若标题部分含广告则原地清除
         _CHAPTER_TITLE_RE = re.compile(
