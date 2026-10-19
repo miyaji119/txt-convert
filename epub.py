@@ -447,7 +447,101 @@ class EPUBGenerator:
         return '\n'.join(paragraphs)
 
     @staticmethod
-    def txt_to_epub(txt_path: str, output_path: str = None, book_title: str = "", author: str = "",
+    def parse_epub(epub_path: str) -> dict:
+        """将 EPUB 文件解析回结构化数据。
+
+        返回:
+          {
+            "title": str, "author": str, "description": str,
+            "language": str, "publisher": str, "isbn": str,
+            "pubdate": str, "tags": [str],
+            "chapters": [{"title": str, "content": str}]
+          }
+        content 为纯文本，段落之间以 \\n 分隔。
+        """
+        if not EPUB_SUPPORT:
+            raise RuntimeError("ebooklib 不可用，请先安装 ebooklib")
+
+        _TAG_RE = re.compile(r'<[^>]+>', re.S)
+
+        def _strip(s: str) -> str:
+            return html.unescape(_TAG_RE.sub('', s)).strip()
+
+        def _parse_item(item) -> tuple:
+            """返回 (chapter_title, body_text)，body_text=None 表示跳过（TOC/Nav 页）。"""
+            raw = item.get_content().decode('utf-8', errors='ignore')
+            # 跳过 nav / TOC 页
+            if ('<nav' in raw.lower()
+                    or 'epub:type="frontmatter toc"' in raw
+                    or "epub:type='frontmatter toc'" in raw):
+                return '', None
+            # 跳过链接密集型目录页（外部 EPUB 兜底）
+            link_count = raw.lower().count('<a ')
+            if link_count > 12:
+                body_m = re.search(r'<body[^>]*>(.*?)</body>', raw, re.S | re.I)
+                body_raw = body_m.group(1) if body_m else raw
+                non_link = _TAG_RE.sub('', re.sub(r'<a\b[^>]*>.*?</a>', '', body_raw, flags=re.S | re.I))
+                if len(html.unescape(non_link).strip()) < 200:
+                    return '', None
+
+            title_m = re.search(r'<h[1-3][^>]*>(.*?)</h[1-3]>', raw, re.S | re.I)
+            ch_title = _strip(title_m.group(1)) if title_m else ''
+
+            body_m = re.search(r'<body[^>]*>(.*?)</body>', raw, re.S | re.I)
+            body = body_m.group(1) if body_m else raw
+
+            paras = []
+            for p_m in re.finditer(r'<p[^>]*>(.*?)</p>', body, re.S | re.I):
+                txt = _strip(p_m.group(1))
+                if txt and txt != ch_title:
+                    paras.append(txt)
+
+            return ch_title, '\n'.join(paras)
+
+        book = epub.read_epub(epub_path, options={'ignore_ncx': False})
+
+        def _first_meta(dc_key):
+            items = book.get_metadata('DC', dc_key)
+            return items[0][0] if items else ''
+
+        title    = _first_meta('title')
+        author   = _first_meta('creator')
+        desc     = _first_meta('description')
+        language = _first_meta('language') or 'zh'
+        publisher = _first_meta('publisher')
+        pubdate  = _first_meta('date')
+        tags     = [t[0] for t in book.get_metadata('DC', 'subject') if t[0]]
+        isbn = ''
+        for val, _ in book.get_metadata('DC', 'identifier'):
+            if val and not val.startswith('urn:uuid:'):
+                isbn = val
+                break
+
+        chapters = []
+        for item_id, _linear in book.spine:
+            item = book.get_item_with_id(item_id)
+            if item is None:
+                continue
+            mt = getattr(item, 'media_type', '') or ''
+            if 'html' not in mt.lower() and 'xhtml' not in mt.lower():
+                continue
+            ch_title, body = _parse_item(item)
+            if body is None:
+                continue
+            if not body.strip() and not ch_title:
+                continue
+            chapters.append({'title': ch_title or '无题', 'content': body})
+
+        return {
+            'title': title, 'author': author, 'description': desc,
+            'language': language, 'publisher': publisher,
+            'isbn': isbn, 'pubdate': pubdate, 'tags': tags,
+            'chapters': chapters,
+        }
+
+    @staticmethod
+    def txt_to_epub(txt_path: Optional[str], output_path: str = None,
+                    book_title: str = "", author: str = "",
                     cover_image: str = None, auto_search_cover: bool = False, cover_url: str = None,
                     description: str = "", publisher: str = "",
                     margin: str = "0 4%", line_height: float = 1.8,
@@ -459,18 +553,25 @@ class EPUBGenerator:
                     style_presets: list = None,
                     header_images: list = None,
                     fonts: dict = None,
-                    illustrations: list = None) -> Optional[str]:
-        """将TXT文件转换为EPUB"""
+                    illustrations: list = None,
+                    chapters: list = None) -> Optional[str]:
+        """将TXT文件（或预解析章节列表）转换为EPUB。
+
+        当 chapters 不为 None 时跳过文件读取，直接使用传入的章节列表；
+        此时 txt_path 可为 None，但必须通过 output_path 指定输出路径。
+        """
         if not EPUB_SUPPORT:
             print("❌ EPUB生成功能不可用，请先安装ebooklib库")
             return None
 
         try:
-            content, encoding = EncodingDetector.read_file_with_auto_encoding(txt_path)
-            chapters = EPUBGenerator._parse_chapters(content)
-
-            if not chapters:
-                chapters = [{'title': book_title if book_title else "正文", 'content': content}]
+            content = ''
+            if chapters is None:
+                # 正常路径：读文件并解析章节
+                content, _enc = EncodingDetector.read_file_with_auto_encoding(txt_path)
+                chapters = EPUBGenerator._parse_chapters(content)
+                if not chapters:
+                    chapters = [{'title': book_title if book_title else "正文", 'content': content}]
 
             # 手动卷分配：在指定章节前插入卷标题章节（_VOLUME_RE 会自动识别生成两级 TOC）
             if volume_map:
@@ -485,19 +586,25 @@ class EPUBGenerator:
                 chapters = result_chs
 
             if not book_title:
-                book_title = EPUBGenerator._extract_title(content)
+                if content:
+                    book_title = EPUBGenerator._extract_title(content)
                 if book_title:
                     print(f"   从内容中提取书名: {book_title}")
-                else:
+                elif txt_path:
                     book_title = os.path.splitext(os.path.basename(txt_path))[0].replace('_epub_ready', '')
+                else:
+                    book_title = "未命名"
 
             if not author:
-                author = EPUBGenerator._extract_author(content)
+                if content:
+                    author = EPUBGenerator._extract_author(content)
                 if author:
                     print(f"   从内容中提取作者: {author}")
-                else:
+                elif txt_path:
                     print("   ⚠️ 未能从文件中提取作者名")
                     author = input("   请输入作者名: ").strip() or "未知"
+                else:
+                    author = "未知"
 
             book = epub.EpubBook()
             book.set_identifier(f"urn:uuid:{datetime.now().strftime('%Y%m%d%H%M%S')}")
@@ -520,12 +627,14 @@ class EPUBGenerator:
 
             # 封面处理
             actual_cover_path = cover_image
+            _asset_dir = (os.path.dirname(os.path.abspath(txt_path))
+                          if txt_path else os.path.expanduser('~/.txt2epub/covers'))
             if cover_url and not actual_cover_path:
-                cover_dir = os.path.dirname(os.path.abspath(txt_path)) or '.'
-                actual_cover_path = CoverDownloader.download_cover_from_url(cover_url, cover_dir)
+                os.makedirs(_asset_dir, exist_ok=True)
+                actual_cover_path = CoverDownloader.download_cover_from_url(cover_url, _asset_dir)
             if auto_search_cover and not actual_cover_path:
-                cover_dir = os.path.dirname(os.path.abspath(txt_path)) or '.'
-                actual_cover_path = CoverDownloader.search_and_download_cover(book_title, author or "", cover_dir)
+                os.makedirs(_asset_dir, exist_ok=True)
+                actual_cover_path = CoverDownloader.search_and_download_cover(book_title, author or "", _asset_dir)
 
             if actual_cover_path and os.path.exists(actual_cover_path):
                 try:
@@ -812,7 +921,11 @@ class EPUBGenerator:
 
             if output_path is None:
                 safe_book_title = re.sub(r'[<>:"/\\|?*]', '_', book_title)
-                output_dir = os.path.dirname(os.path.abspath(txt_path)) or '.'
+                if txt_path:
+                    output_dir = os.path.dirname(os.path.abspath(txt_path)) or '.'
+                else:
+                    output_dir = os.path.expanduser('~/.txt2epub/output')
+                    os.makedirs(output_dir, exist_ok=True)
                 output_path = os.path.join(output_dir, f"{safe_book_title}.epub")
 
             epub.write_epub(output_path, book, {})

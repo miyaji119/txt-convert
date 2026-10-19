@@ -4,6 +4,7 @@
 - 晋江文学城（jjwxc.net）：搜索页解析 → 详情页封面
 - 长佩文学（gongzicp.com）：搜索页 HTML 解析
 - 豆瓣读书（book.douban.com）：subject_suggest JSON 接口
+- 微信读书（weread.qq.com）：/web/search/global 接口，无需登录
 - Bing 图片（兜底）
 
 设计要点：
@@ -618,13 +619,83 @@ def _search_via_bing(book_title: str, author: str = '') -> List[CoverCandidate]:
 
 
 # ======================================================================
+# 搜索源 5：微信读书
+# ======================================================================
+def _search_via_weread(book_title: str, author: str = '') -> List[CoverCandidate]:
+    """微信读书搜索：调用 /web/search/global 接口（无需登录）
+
+    接口：https://weread.qq.com/web/search/global?keyword={kw}
+    返回 JSON，books[].bookInfo 含 title/author/cover（CDN 直链）。
+    封面 CDN 可直接下载，无需鉴权。
+    """
+    candidates: List[CoverCandidate] = []
+    kw = book_title.strip()
+    if not kw:
+        return candidates
+
+    print(f"   [微信读书] 搜索: {kw}")
+    url = ("https://weread.qq.com/web/search/global"
+           "?keyword=" + urllib.parse.quote(kw))
+    raw, _ = _http_get(url, referer="https://weread.qq.com/", timeout=10)
+    if not raw:
+        print("   [微信读书] 搜索请求失败")
+        return candidates
+
+    try:
+        data = json.loads(raw.decode("utf-8", errors="ignore"))
+    except Exception as e:
+        print(f"   [微信读书] JSON 解析失败: {e}")
+        return candidates
+
+    books = data.get("books", [])
+    if not books:
+        print("   [微信读书] 搜索无结果")
+        return candidates
+
+    print(f"   [微信读书] 找到 {len(books)} 本候选书")
+    for item in books[:6]:
+        info = item.get("bookInfo", {})
+        cover = info.get("cover", "")
+        if not cover:
+            continue
+        title = info.get("title", "")
+        item_author = info.get("author", "")
+        book_id = info.get("bookId", "")
+
+        confidence = 0.0
+        if title == kw:
+            confidence = 1.0
+        elif kw in title:
+            confidence = 0.85
+        elif title and title in kw:
+            confidence = 0.65
+
+        if author.strip() and item_author and author.strip() in item_author:
+            confidence = min(1.0, confidence + 0.1)
+
+        candidates.append(CoverCandidate(
+            image_url=cover,
+            source="weread",
+            source_name="微信读书",
+            referer="https://weread.qq.com/",
+            book_id=book_id,
+            book_title=title,
+            author=item_author,
+            confidence=confidence,
+        ))
+
+    print(f"   [微信读书] 解析出 {len(candidates)} 个封面候选")
+    return candidates
+
+
+# ======================================================================
 # 主搜索接口
 # ======================================================================
 def search_cover_candidates(book_title: str,
                              author: str = '') -> List[CoverCandidate]:
     """搜索封面，返回所有候选（按置信度降序）
 
-    依次调用晋江、长佩、豆瓣、Bing 四个源，合并去重。
+    依次调用晋江、豆瓣、微信读书、长佩、Bing 五个源，合并去重。
     单源失败不影响其他源。
     """
     if not book_title or not book_title.strip():
@@ -639,6 +710,7 @@ def search_cover_candidates(book_title: str,
     sources = [
         ('晋江文学城', lambda: _search_via_jjwxc(book_title, author)),
         ('豆瓣读书', lambda: _search_via_douban(book_title, author)),
+        ('微信读书', lambda: _search_via_weread(book_title, author)),
         ('长佩文学', lambda: _search_via_gongzicp(book_title, author)),
         ('Bing 图片', lambda: _search_via_bing(book_title, author)),
     ]
@@ -783,6 +855,7 @@ class CoverDownloader:
     _search_via_jjwxc = staticmethod(_search_via_jjwxc)
     _search_via_gongzicp = staticmethod(_search_via_gongzicp)
     _search_via_douban = staticmethod(_search_via_douban)
+    _search_via_weread = staticmethod(_search_via_weread)
     _search_via_bing_images = staticmethod(_search_via_bing)
 
     # 主接口

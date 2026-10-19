@@ -767,6 +767,382 @@ async def save_chapter_rules(req: ChapterRulesReq):
     return {"ok": True, "file_path": CHAPTER_RULES_FILE}
 
 
+# ── EPUB 编辑器会话 ────────────────────────────────────────────
+import threading as _threading
+
+_SESSION_LOCK = _threading.Lock()
+_SESSION: dict = {
+    "loaded": False,
+    "source_path": "",
+    "source_type": "",   # "txt" | "epub"
+    "title": "",
+    "author": "",
+    "description": "",
+    "publisher": "",
+    "isbn": "",
+    "pubdate": "",
+    "language": "zh",
+    "tags": [],
+    "chapters": [],      # [{"title": str, "content": str}]
+}
+
+SESSION_FILE = os.path.join(os.path.expanduser('~'), '.txt2epub', 'editor_session.json')
+
+
+def _save_session():
+    os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
+    with open(SESSION_FILE, 'w', encoding='utf-8') as f:
+        json.dump(_SESSION, f, ensure_ascii=False, indent=2)
+
+
+def _session_snapshot() -> dict:
+    """返回会话摘要（不含完整 content）。"""
+    with _SESSION_LOCK:
+        chs = _SESSION["chapters"]
+        return {
+            "loaded":       _SESSION["loaded"],
+            "source_path":  _SESSION["source_path"],
+            "source_type":  _SESSION["source_type"],
+            "title":        _SESSION["title"],
+            "author":       _SESSION["author"],
+            "description":  _SESSION["description"],
+            "publisher":    _SESSION["publisher"],
+            "isbn":         _SESSION["isbn"],
+            "pubdate":      _SESSION["pubdate"],
+            "language":     _SESSION["language"],
+            "tags":         _SESSION["tags"],
+            "chapters_count": len(chs),
+            "chars_total":  sum(len(c.get("content", "")) for c in chs),
+        }
+
+
+# ── 加载文件到编辑器会话 ───────────────────────────────────────
+class EditorLoadReq(BaseModel):
+    path: str
+
+
+@app.post("/api/editor/load")
+async def api_editor_load(req: EditorLoadReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        ext = os.path.splitext(req.path)[1].lower()
+        if ext == '.epub':
+            data = EPUBGenerator.parse_epub(req.path)
+            src_type = 'epub'
+        else:
+            content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+            title = EPUBGenerator._extract_title(content) or ''
+            author = EPUBGenerator._extract_author(content) or ''
+            chapters = EPUBGenerator._parse_chapters(content)
+            if not chapters:
+                chapters = [{'title': '正文', 'content': content}]
+            data = {
+                'title': title, 'author': author, 'description': '',
+                'language': 'zh', 'publisher': '', 'isbn': '',
+                'pubdate': '', 'tags': [], 'chapters': chapters,
+            }
+            src_type = 'txt'
+
+        with _SESSION_LOCK:
+            _SESSION.update({
+                'loaded': True,
+                'source_path': req.path,
+                'source_type': src_type,
+                'title': data.get('title', ''),
+                'author': data.get('author', ''),
+                'description': data.get('description', ''),
+                'publisher': data.get('publisher', ''),
+                'isbn': data.get('isbn', ''),
+                'pubdate': data.get('pubdate', ''),
+                'language': data.get('language', 'zh'),
+                'tags': data.get('tags', []),
+                'chapters': data.get('chapters', []),
+            })
+        config.add_recent_file(req.path)
+        return _session_snapshot()
+
+    try:
+        snap = await loop.run_in_executor(executor, _run)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return snap
+
+
+# ── 会话状态 ────────────────────────────────────────────────────
+@app.get("/api/editor/book")
+async def api_editor_book():
+    return _session_snapshot()
+
+
+# ── 章节列表 ───────────────────────────────────────────────────
+@app.get("/api/editor/chapters")
+async def api_editor_chapters():
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        result = []
+        for i, ch in enumerate(_SESSION["chapters"]):
+            content = ch.get("content", "")
+            first_line = content.strip().split('\n')[0][:80] if content.strip() else ''
+            result.append({
+                "i": i,
+                "title": ch["title"],
+                "chars": len(content),
+                "first_line": first_line,
+            })
+    return {"chapters": result}
+
+
+# ── 读/写单个章节 ──────────────────────────────────────────────
+@app.get("/api/editor/chapter/{i}")
+async def api_editor_chapter_get(i: int):
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        chs = _SESSION["chapters"]
+        if i < 0 or i >= len(chs):
+            raise HTTPException(404, f"章节 {i} 不存在（共 {len(chs)} 章）")
+        return {"i": i, "title": chs[i]["title"], "content": chs[i].get("content", "")}
+
+
+class ChapterEditReq(BaseModel):
+    title: str = ""
+    content: str = ""
+
+
+@app.put("/api/editor/chapter/{i}")
+async def api_editor_chapter_put(i: int, req: ChapterEditReq):
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        chs = _SESSION["chapters"]
+        if i < 0 or i >= len(chs):
+            raise HTTPException(404, f"章节 {i} 不存在")
+        chs[i]["title"] = req.title if req.title else chs[i]["title"]
+        chs[i]["content"] = req.content
+    return {"ok": True, "i": i}
+
+
+@app.delete("/api/editor/chapter/{i}")
+async def api_editor_chapter_delete(i: int):
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        chs = _SESSION["chapters"]
+        if i < 0 or i >= len(chs):
+            raise HTTPException(404, f"章节 {i} 不存在")
+        removed = chs.pop(i)
+    return {"ok": True, "removed_title": removed["title"], "chapters_count": len(chs)}
+
+
+# ── 合并章节（与前一章合并）───────────────────────────────────
+@app.post("/api/editor/chapters/merge/{i}")
+async def api_editor_chapters_merge(i: int):
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        chs = _SESSION["chapters"]
+        if i <= 0 or i >= len(chs):
+            raise HTTPException(400, f"章节 {i} 无法与前一章合并（越界）")
+        prev = chs[i - 1]
+        curr = chs[i]
+        prev["content"] = (prev.get("content", "").rstrip('\n')
+                           + '\n' + curr.get("content", "").lstrip('\n'))
+        chs.pop(i)
+    return {"ok": True, "merged_into": i - 1, "chapters_count": len(chs)}
+
+
+# ── 更新元数据 ────────────────────────────────────────────────
+class EditorMetaReq(BaseModel):
+    title: str = ""
+    author: str = ""
+    description: str = ""
+    publisher: str = ""
+    isbn: str = ""
+    pubdate: str = ""
+    language: str = ""
+    tags: List[str] = []
+
+
+@app.post("/api/editor/meta")
+async def api_editor_meta(req: EditorMetaReq):
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        if req.title:     _SESSION["title"]       = req.title
+        if req.author:    _SESSION["author"]      = req.author
+        if req.description is not None:  _SESSION["description"] = req.description
+        if req.publisher: _SESSION["publisher"]   = req.publisher
+        if req.isbn:      _SESSION["isbn"]        = req.isbn
+        if req.pubdate:   _SESSION["pubdate"]     = req.pubdate
+        if req.language:  _SESSION["language"]    = req.language
+        if req.tags is not None:  _SESSION["tags"] = req.tags
+    return _session_snapshot()
+
+
+# ── 全文查找 ──────────────────────────────────────────────────
+class EditorFindReq(BaseModel):
+    q: str
+    case_sensitive: bool = False
+
+
+@app.post("/api/editor/find")
+async def api_editor_find(req: EditorFindReq):
+    if not req.q:
+        raise HTTPException(400, "查找内容不能为空")
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        flags = 0 if req.case_sensitive else re.IGNORECASE
+        pattern = re.compile(re.escape(req.q), flags)
+        hits = []
+        for i, ch in enumerate(_SESSION["chapters"]):
+            for li, line in enumerate(ch.get("content", "").split('\n')):
+                if pattern.search(line):
+                    hits.append({
+                        "chapter_i": i,
+                        "chapter_title": ch["title"],
+                        "line": li,
+                        "text": line.strip()[:120],
+                    })
+                    if len(hits) >= 500:
+                        break
+            if len(hits) >= 500:
+                break
+    return {"count": len(hits), "results": hits}
+
+
+# ── 全文替换 ──────────────────────────────────────────────────
+class EditorReplaceReq(BaseModel):
+    find: str
+    replace: str = ""
+    case_sensitive: bool = False
+
+
+@app.post("/api/editor/replace")
+async def api_editor_replace(req: EditorReplaceReq):
+    if not req.find:
+        raise HTTPException(400, "查找内容不能为空")
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        flags = 0 if req.case_sensitive else re.IGNORECASE
+        pattern = re.compile(re.escape(req.find), flags)
+        total = 0
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            for ch in _SESSION["chapters"]:
+                content = ch.get("content", "")
+                new_content, n = pattern.subn(req.replace, content)
+                if n:
+                    ch["content"] = new_content
+                    total += n
+        return total
+
+    try:
+        replaced = await loop.run_in_executor(executor, _run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"replaced": replaced}
+
+
+# ── 从会话构建 EPUB ────────────────────────────────────────────
+class EditorBuildReq(BaseModel):
+    output_path: str = ""
+    cover_image: str = ""
+    cover_url: str = ""
+    auto_search_cover: bool = False
+    margin: str = "0 4%"
+    line_height: float = 1.8
+    text_indent: str = "2em"
+    custom_css: str = ""
+    dialog_styles: dict = {}
+    drop_cap: bool = False
+    style_presets: list = []
+    header_images: list = []
+    fonts: dict = {}
+    illustrations: list = []
+
+
+@app.post("/api/editor/build")
+async def api_editor_build(req: EditorBuildReq):
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters  = [dict(c) for c in _SESSION["chapters"]]
+            title     = _SESSION["title"]
+            author    = _SESSION["author"]
+            desc      = _SESSION["description"]
+            publisher = _SESSION["publisher"]
+            isbn      = _SESSION["isbn"]
+            pubdate   = _SESSION["pubdate"]
+            language  = _SESSION["language"]
+            tags      = list(_SESSION["tags"])
+
+        output_path = req.output_path or None
+        epub_path = EPUBGenerator.txt_to_epub(
+            None, output_path,
+            title, author,
+            req.cover_image or None, req.auto_search_cover, req.cover_url or None,
+            desc, publisher,
+            req.margin, req.line_height, req.text_indent, req.custom_css,
+            req.dialog_styles or None,
+            isbn, pubdate, language,
+            tags or None, req.drop_cap,
+            None,                    # volume_map — editor 中已手动排列
+            req.style_presets or None,
+            req.header_images or None,
+            req.fonts or None,
+            req.illustrations or None,
+            chapters=chapters,
+        )
+        if not epub_path:
+            raise RuntimeError("EPUB 构建失败")
+        return epub_path
+
+    try:
+        epub_path = await loop.run_in_executor(executor, _run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"epub_path": epub_path}
+
+
+# ── 保存会话到文件 ─────────────────────────────────────────────
+@app.post("/api/editor/save-session")
+async def api_editor_save_session():
+    with _SESSION_LOCK:
+        if not _SESSION["loaded"]:
+            raise HTTPException(400, "尚未加载书籍")
+        _save_session()
+    return {"ok": True, "session_file": SESSION_FILE}
+
+
+# ── 恢复上次会话 ───────────────────────────────────────────────
+@app.post("/api/editor/restore-session")
+async def api_editor_restore_session():
+    if not os.path.isfile(SESSION_FILE):
+        raise HTTPException(404, "没有已保存的会话")
+    try:
+        with open(SESSION_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        with _SESSION_LOCK:
+            _SESSION.update(data)
+        return _session_snapshot()
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # ── Finder 集成 ────────────────────────────────────────────────
 async def open_finder(req: PathReq):
     p = req.path
