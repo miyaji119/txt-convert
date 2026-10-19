@@ -320,7 +320,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 box-shadow:0 2px 12px rgba(217,119,6,.3);">📚</div>
     <span style="font-weight:600; color:var(--text); letter-spacing:-.01em;">TXT → EPUB</span>
     <span style="font-size:10px; padding:2px 7px; border-radius:5px;
-                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.3</span>
+                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.8</span>
   </div>
   <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
     <button @click="toggleTheme()"
@@ -921,7 +921,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── 广告规则 ──────────────────────────────────── -->
-    <div x-show="page==='adfilter'" class="page"
+    <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
       <div style="margin-bottom:24px;">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
@@ -936,7 +936,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <input class="inp" type="text" x-model="adScanPath"
                  placeholder="/Users/…/novel.txt"
                  @keydown.enter="doAdScan()">
-          <button class="btn btn-ghost" @click="browseFile('adScan')">浏览</button>
+          <button class="btn btn-ghost" @click="adScanBrowse()">浏览</button>
           <button class="btn btn-amber" @click="doAdScan()" :disabled="adScanWorking||!adScanPath">
             <span x-show="adScanWorking" class="spin"></span>
             <span x-text="adScanWorking?'扫描中…':'扫描'"></span>
@@ -1085,7 +1085,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── 章节规则 ──────────────────────────────────── -->
-    <div x-show="page==='chapterRules'" class="page"
+    <div x-show="page==='chapterRules'" x-data="chapterRulesPanel()" class="page"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
       <div style="margin-bottom:24px;">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
@@ -1207,6 +1207,214 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <p style="margin-top:8px; font-size:11px; color:var(--dim); line-height:1.5;">
           保存后生成标准 JSON 文件，可直接用文本编辑器修改，修改后点「重新加载」生效。
         </p>
+      </div>
+    </div>
+
+    <!-- ── EPUB 编辑器 ────────────────────────────── -->
+    <div x-show="page==='editor'" x-data="editorPanel()" class="page"
+         style="max-width:960px; margin:0 auto; padding:32px 24px;">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
+                   color:var(--text); margin-bottom:4px;">EPUB 编辑器</h1>
+        <p style="color:var(--muted);">加载 .epub 或 .txt 文件，编辑章节内容后一键重建为 EPUB</p>
+      </div>
+
+      <!-- 加载文件 -->
+      <div class="card" style="margin-bottom:12px;">
+        <span class="lbl">加载文件</span>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input class="inp" type="text" x-model="editorPath"
+                 placeholder="选择 .epub 或 .txt 文件…" readonly style="flex:1;">
+          <button class="btn btn-ghost" @click="editorBrowse()">浏览…</button>
+          <button class="btn btn-amber" @click="editorLoad()"
+                  :disabled="!editorPath||editorWorking">
+            <span x-show="editorWorking" class="spin"></span>
+            <span x-text="editorWorking?'加载中…':'加载'"></span>
+          </button>
+        </div>
+        <div x-show="editorLoaded"
+             style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <span style="font-size:12px; color:var(--muted);">
+            《<span x-text="editorTitle"></span>》·
+            <span x-text="editorAuthor"></span> ·
+            <strong x-text="editorChapters.length"></strong> 章
+          </span>
+          <button class="btn btn-ghost" style="font-size:11px; padding:3px 9px;"
+                  @click="editorSaveSession()">💾 保存会话</button>
+          <button class="btn btn-ghost" style="font-size:11px; padding:3px 9px;"
+                  @click="editorRestoreSession()">↺ 恢复会话</button>
+        </div>
+      </div>
+
+      <div x-show="editorLoaded">
+        <!-- 章节列表 + 编辑区 -->
+        <div style="display:grid; grid-template-columns:260px 1fr; gap:12px;
+                    align-items:start; margin-bottom:12px;">
+
+          <!-- 章节列表 -->
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div style="padding:10px 12px; border-bottom:1px solid var(--border);">
+              <span class="lbl" style="margin:0;">章节列表</span>
+            </div>
+            <div style="max-height:440px; overflow-y:auto;">
+              <template x-for="(ch, i) in editorChapters" :key="i">
+                <div style="display:flex; align-items:center; gap:6px; padding:7px 10px;
+                            cursor:pointer; border-bottom:1px solid rgba(255,255,255,.04);
+                            transition:background .12s;"
+                     :style="editorSelected===i?'background:rgba(217,119,6,.14);':''"
+                     @click="editorSelectChapter(i)"
+                     @mouseenter="if(editorSelected!==i)$el.style.background='rgba(255,255,255,.05)'"
+                     @mouseleave="if(editorSelected!==i)$el.style.background=''">
+                  <span style="font-size:10px; color:var(--dim); width:22px; flex-shrink:0;
+                               text-align:right;" x-text="i+1"></span>
+                  <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis;
+                               white-space:nowrap;" x-text="ch.title"></span>
+                  <span style="font-size:10px; color:var(--dim); flex-shrink:0;"
+                        x-text="(ch.chars||0)+'字'"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- 编辑区 -->
+          <div>
+            <div x-show="editorSelected>=0" class="card">
+              <div style="display:flex; align-items:center; justify-content:space-between;
+                          margin-bottom:10px;">
+                <span class="lbl" style="margin:0;">编辑章节</span>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn btn-ghost" @click="editorMerge()"
+                          :disabled="editorSelected<=0"
+                          title="合并入前一章">↑ 合并</button>
+                  <button class="btn btn-ghost"
+                          style="color:#ef4444; border-color:rgba(239,68,68,.3);"
+                          @click="editorDeleteChapter()"
+                          title="删除此章">删除</button>
+                </div>
+              </div>
+              <input class="inp" type="text" x-model="editorChTitle"
+                     placeholder="章节标题" style="margin-bottom:8px; font-weight:500;">
+              <textarea class="inp" x-model="editorChContent" rows="14"
+                        style="resize:vertical; font-size:12px; line-height:1.75;
+                               font-family:inherit;"></textarea>
+              <div style="display:flex; align-items:center; justify-content:space-between;
+                          margin-top:8px;">
+                <span class="sublbl" style="margin:0;"
+                      x-text="editorChContent.length+'字'"></span>
+                <button class="btn btn-amber" @click="editorSaveChapter()"
+                        :disabled="editorChWorking">
+                  <span x-show="editorChWorking" class="spin"></span>保存章节
+                </button>
+              </div>
+            </div>
+            <div x-show="editorSelected<0" class="card"
+                 style="display:flex; align-items:center; justify-content:center;
+                        min-height:200px;">
+              <span class="sublbl">← 点击左侧章节开始编辑</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 查找 / 替换 -->
+        <div class="card" style="margin-bottom:12px;">
+          <span class="lbl">查找 / 替换</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+            <div style="display:flex; gap:6px;">
+              <input class="inp" type="text" x-model="editorFindQuery"
+                     placeholder="查找关键词…" style="flex:1;"
+                     @keydown.enter="editorFind()">
+              <button class="btn btn-ghost" @click="editorFind()"
+                      :disabled="editorFindWorking||!editorFindQuery">
+                <span x-show="editorFindWorking" class="spin"></span>🔍
+              </button>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <input class="inp" type="text" x-model="editorReplaceFrom"
+                     placeholder="查找（替换用）…" style="flex:1;">
+              <input class="inp" type="text" x-model="editorReplaceTo"
+                     placeholder="替换为…" style="flex:1;">
+              <button class="btn btn-amber" @click="editorReplace()"
+                      :disabled="editorReplaceWorking||!editorReplaceFrom">
+                <span x-show="editorReplaceWorking" class="spin"></span>替换
+              </button>
+            </div>
+          </div>
+          <div x-show="editorFindResults.length>0"
+               style="max-height:180px; overflow-y:auto; border-top:1px solid var(--border);
+                      padding-top:8px;">
+            <div style="font-size:11px; color:var(--dim); margin-bottom:4px;"
+                 x-text="'共 '+editorFindResults.length+' 处命中'+(editorFindResults.length>50?' （显示前 50 条）':'')"></div>
+            <template x-for="(hit, i) in editorFindResults.slice(0,50)" :key="i">
+              <div style="font-size:11px; padding:3px 6px; border-radius:4px; cursor:pointer;
+                          transition:background .12s;"
+                   @click="editorSelectChapter(hit.chapter_i)"
+                   @mouseenter="$el.style.background='rgba(255,255,255,.05)'"
+                   @mouseleave="$el.style.background=''">
+                <span style="color:#6366f1;" x-text="'#'+(hit.chapter_i+1)+' '+hit.chapter_title"></span>
+                <span style="color:var(--dim);" x-text="' · 第'+hit.line+'行'"></span>
+                <span style="color:var(--text); margin-left:6px;"
+                      x-text="hit.text.slice(0,80)"></span>
+              </div>
+            </template>
+          </div>
+          <div x-show="editorFindResults.length===0&&editorFindDone"
+               class="sublbl" style="padding:4px 0;">未找到匹配内容</div>
+        </div>
+
+        <!-- 元数据编辑 -->
+        <div class="card" style="margin-bottom:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;
+                      cursor:pointer;" @click="editorMetaOpen=!editorMetaOpen">
+            <span class="lbl" style="margin:0;">书籍元数据</span>
+            <span style="font-size:12px; color:var(--muted);"
+                  x-text="editorMetaOpen?'▲ 收起':'▼ 展开'"></span>
+          </div>
+          <div x-show="editorMetaOpen"
+               style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div>
+              <div class="sublbl">书名</div>
+              <input class="inp" type="text" x-model="editorTitle">
+            </div>
+            <div>
+              <div class="sublbl">作者</div>
+              <input class="inp" type="text" x-model="editorAuthor">
+            </div>
+            <div>
+              <div class="sublbl">出版社</div>
+              <input class="inp" type="text" x-model="editorPublisher">
+            </div>
+            <div>
+              <div class="sublbl">出版日期</div>
+              <input class="inp" type="text" x-model="editorPubdate" placeholder="2024-01-01">
+            </div>
+            <div style="grid-column:span 2;">
+              <div class="sublbl">简介</div>
+              <textarea class="inp" x-model="editorDescription" rows="3"
+                        style="resize:vertical;"></textarea>
+            </div>
+            <div style="grid-column:span 2; display:flex; justify-content:flex-end;">
+              <button class="btn btn-amber" @click="editorSaveMeta()"
+                      :disabled="editorMetaSaving">
+                <span x-show="editorMetaSaving" class="spin"></span>更新元数据
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 重建 EPUB -->
+        <div class="card">
+          <span class="lbl">重建 EPUB</span>
+          <div class="sublbl">输出路径（留空则写入 ~/.txt2epub/output/）</div>
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input class="inp" type="text" x-model="editorBuildOutput"
+                   placeholder="~/.txt2epub/output/书名.epub" style="flex:1;">
+          </div>
+          <button class="btn btn-amber" style="width:100%; font-size:14px; padding:10px;"
+                  @click="editorBuild()" :disabled="editorBuildWorking">
+            <span x-show="editorBuildWorking" class="spin"></span>
+            <span x-text="editorBuildWorking?'重建中…':'🔨  重建 EPUB'"></span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1403,6 +1611,304 @@ tr:hover td { background: rgba(255,255,255,.015); }
   </template>
 </div>
 
+<!-- ══ Alpine 组件注册 ════════════════════════════════════════ -->
+<script>
+document.addEventListener('alpine:init', () => {
+
+  // ── 广告规则面板 ─────────────────────────────────────────────
+  Alpine.data('adfilterPanel', () => ({
+    adHardKw:[], adSoftKw:[], adThreshold:0.68,
+    adDefaultHardKw:[], adDefaultSoftKw:[], adDefaultThreshold:0.68,
+    adHardKwInput:'', adSoftKwInput:'',
+    adRulesDirty:false, adRulesLoaded:false, adRulesSaving:false,
+    adRulesFilePath:'',
+    adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
+
+    init() { this.loadAdRules() },
+
+    async loadAdRules() {
+      try {
+        const r = await fetch('/api/adfilter/rules').then(r=>r.json())
+        this.adHardKw = [...(r.hard_kw||[])]
+        this.adSoftKw = [...(r.soft_kw||[])]
+        this.adThreshold = r.threshold ?? 0.68
+        this.adDefaultHardKw = [...(r.default_hard_kw||[])]
+        this.adDefaultSoftKw = [...(r.default_soft_kw||[])]
+        this.adDefaultThreshold = r.default_threshold ?? 0.68
+        this.adRulesFilePath = r.file_path || ''
+        this.adRulesLoaded = true; this.adRulesDirty = false
+      } catch(_) {}
+    },
+
+    async saveAdRules() {
+      this.adRulesSaving = true
+      try {
+        await this.post('/api/adfilter/rules', {
+          hard_kw: this.adHardKw,
+          soft_kw: this.adSoftKw,
+          threshold: parseFloat(this.adThreshold) || 0.68,
+        })
+        this.adRulesDirty = false
+        this.toast('规则已保存', `强匹配 ${this.adHardKw.length} 条 · 软匹配 ${this.adSoftKw.length} 条`)
+      } catch(e) { this.toast('保存失败', e.message, false) }
+      this.adRulesSaving = false
+    },
+
+    resetAdRules() {
+      this.adHardKw = [...this.adDefaultHardKw]
+      this.adSoftKw = [...this.adDefaultSoftKw]
+      this.adThreshold = this.adDefaultThreshold
+      this.adRulesDirty = true
+    },
+
+    addAdHardKw() {
+      const kw = this.adHardKwInput.trim()
+      if (kw && !this.adHardKw.includes(kw)) { this.adHardKw.push(kw); this.adRulesDirty = true }
+      this.adHardKwInput = ''
+    },
+
+    addAdSoftKw() {
+      const kw = this.adSoftKwInput.trim()
+      if (kw && !this.adSoftKw.includes(kw)) { this.adSoftKw.push(kw); this.adRulesDirty = true }
+      this.adSoftKwInput = ''
+    },
+
+    async doAdScan() {
+      if (!this.adScanPath || this.adScanWorking) return
+      this.adScanWorking = true; this.adScanResults = []; this.adScanDone = false
+      try {
+        const r = await this.post('/api/adfilter/scan', {path: this.adScanPath})
+        this.adScanResults = r.suspicious || []; this.adScanDone = true
+      } catch(e) { this.toast('扫描失败', e.message, false) }
+      this.adScanWorking = false
+    },
+
+    async adScanBrowse() {
+      const r = await this.post('/api/dialog', { mode:'file', title:'选择要扫描的 TXT 文件' })
+      if (r.path) this.adScanPath = r.path
+    },
+  }))
+
+  // ── 章节规则面板 ─────────────────────────────────────────────
+  Alpine.data('chapterRulesPanel', () => ({
+    chapterPatterns:[], chapterDefaultPatterns:[],
+    chapterRulesFilePath:'',
+    chapterRulesDirty:false, chapterRulesLoaded:false, chapterRulesSaving:false,
+    newChapterPattern:'', chapterDefaultsOpen:false,
+
+    init() { this.loadChapterRules() },
+
+    async loadChapterRules() {
+      try {
+        const r = await fetch('/api/chapter/rules').then(r=>r.json())
+        this.chapterPatterns = (r.patterns||[]).map(p=>({...p}))
+        this.chapterDefaultPatterns = r.default_patterns||[]
+        this.chapterRulesFilePath = r.file_path||''
+        this.chapterRulesLoaded = true; this.chapterRulesDirty = false
+      } catch(_) {}
+    },
+
+    async saveChapterRules() {
+      this.chapterRulesSaving = true
+      try {
+        await this.post('/api/chapter/rules', { patterns: this.chapterPatterns })
+        this.chapterRulesDirty = false
+        this.toast('章节规则已保存', `自定义规则 ${this.chapterPatterns.length} 条`)
+      } catch(e) { this.toast('保存失败', e.message, false) }
+      this.chapterRulesSaving = false
+    },
+
+    addChapterPattern() {
+      const pat = this.newChapterPattern.trim(); if (!pat) return
+      this.chapterPatterns.push({ pattern: pat, enabled: true })
+      this.newChapterPattern = ''; this.chapterRulesDirty = true
+    },
+
+    removeChapterPattern(i) { this.chapterPatterns.splice(i, 1); this.chapterRulesDirty = true },
+
+    toggleChapterPattern(i) {
+      this.chapterPatterns[i].enabled = !this.chapterPatterns[i].enabled
+      this.chapterRulesDirty = true
+    },
+  }))
+
+  // ── EPUB 编辑器面板 ──────────────────────────────────────────
+  Alpine.data('editorPanel', () => ({
+    editorPath: '', editorWorking: false, editorLoaded: false,
+    editorTitle: '', editorAuthor: '', editorDescription: '', editorPublisher: '',
+    editorIsbn: '', editorPubdate: '',
+    editorChapters: [],
+    editorSelected: -1, editorChTitle: '', editorChContent: '', editorChWorking: false,
+    editorMetaOpen: false, editorMetaSaving: false,
+    editorFindQuery: '', editorFindResults: [], editorFindWorking: false, editorFindDone: false,
+    editorReplaceFrom: '', editorReplaceTo: '', editorReplaceWorking: false,
+    editorBuildOutput: '', editorBuildWorking: false,
+
+    async editorBrowse() {
+      const r = await this.post('/api/dialog', { mode:'file', title:'选择 EPUB 或 TXT 文件' })
+      if (r.path) this.editorPath = r.path
+    },
+
+    async editorLoad() {
+      if (!this.editorPath || this.editorWorking) return
+      this.editorWorking = true
+      try {
+        const snap = await this.post('/api/editor/load', { path: this.editorPath })
+        this.editorTitle       = snap.title       || ''
+        this.editorAuthor      = snap.author      || ''
+        this.editorDescription = snap.description || ''
+        this.editorPublisher   = snap.publisher   || ''
+        this.editorIsbn        = snap.isbn        || ''
+        this.editorPubdate     = snap.pubdate     || ''
+        this.editorSelected    = -1
+        this.editorChTitle     = ''; this.editorChContent = ''
+        this.editorFindResults = []; this.editorFindDone = false
+        const lr = await fetch('/api/editor/chapters').then(r=>r.json())
+        this.editorChapters = lr.chapters || []
+        this.editorLoaded   = true
+        this.toast('加载成功', `《${snap.title||'未知'}》 ${this.editorChapters.length} 章`)
+      } catch(e) { this.toast('加载失败', e.message, false) }
+      this.editorWorking = false
+    },
+
+    async editorSelectChapter(i) {
+      this.editorSelected = i; this.editorChWorking = true
+      try {
+        const r = await fetch(`/api/editor/chapter/${i}`).then(r=>r.json())
+        this.editorChTitle = r.title || ''; this.editorChContent = r.content || ''
+      } catch(e) { this.toast('加载章节失败', e.message, false) }
+      this.editorChWorking = false
+    },
+
+    async editorSaveChapter() {
+      const i = this.editorSelected
+      if (i < 0 || this.editorChWorking) return
+      this.editorChWorking = true
+      try {
+        const r = await fetch(`/api/editor/chapter/${i}`, {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ title: this.editorChTitle, content: this.editorChContent }),
+        })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        this.editorChapters[i] = {
+          ...this.editorChapters[i],
+          title:      this.editorChTitle,
+          chars:      this.editorChContent.length,
+          first_line: this.editorChContent.split('\n')[0].slice(0, 60),
+        }
+        this.toast('已保存', `第 ${i+1} 章`)
+      } catch(e) { this.toast('保存失败', e.message, false) }
+      this.editorChWorking = false
+    },
+
+    async editorDeleteChapter() {
+      const i = this.editorSelected
+      if (i < 0) return
+      if (!confirm(`确认删除「${this.editorChapters[i]?.title}」？`)) return
+      try {
+        const r = await fetch(`/api/editor/chapter/${i}`, { method: 'DELETE' })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        this.editorChapters.splice(i, 1)
+        this.editorSelected = -1; this.editorChTitle = ''; this.editorChContent = ''
+        this.toast('章节已删除', '')
+      } catch(e) { this.toast('删除失败', e.message, false) }
+    },
+
+    async editorMerge() {
+      const i = this.editorSelected
+      if (i <= 0) return
+      if (!confirm(`确认将「${this.editorChapters[i]?.title}」合并入前一章？`)) return
+      try {
+        await this.post(`/api/editor/chapters/merge/${i}`, {})
+        this.editorChapters.splice(i, 1)
+        this.editorSelected = i - 1
+        await this.editorSelectChapter(i - 1)
+        this.toast('合并成功', '')
+      } catch(e) { this.toast('合并失败', e.message, false) }
+    },
+
+    async editorSaveMeta() {
+      this.editorMetaSaving = true
+      try {
+        await this.post('/api/editor/meta', {
+          title: this.editorTitle, author: this.editorAuthor,
+          description: this.editorDescription, publisher: this.editorPublisher,
+          isbn: this.editorIsbn, pubdate: this.editorPubdate,
+        })
+        this.toast('元数据已更新', '')
+      } catch(e) { this.toast('更新失败', e.message, false) }
+      this.editorMetaSaving = false
+    },
+
+    async editorFind() {
+      if (!this.editorFindQuery || this.editorFindWorking) return
+      this.editorFindWorking = true; this.editorFindDone = false
+      try {
+        const r = await this.post('/api/editor/find', { q: this.editorFindQuery })
+        this.editorFindResults = r.results || []; this.editorFindDone = true
+        if (!this.editorFindResults.length) this.toast('未找到', `"${this.editorFindQuery}"`)
+      } catch(e) { this.toast('查找失败', e.message, false) }
+      this.editorFindWorking = false
+    },
+
+    async editorReplace() {
+      if (!this.editorReplaceFrom || this.editorReplaceWorking) return
+      this.editorReplaceWorking = true
+      try {
+        const r = await this.post('/api/editor/replace', {
+          find: this.editorReplaceFrom, replace: this.editorReplaceTo,
+        })
+        this.toast('替换完成', `共替换 ${r.replaced} 处`)
+        if (this.editorSelected >= 0) await this.editorSelectChapter(this.editorSelected)
+        const lr = await fetch('/api/editor/chapters').then(r=>r.json())
+        this.editorChapters = lr.chapters || []
+      } catch(e) { this.toast('替换失败', e.message, false) }
+      this.editorReplaceWorking = false
+    },
+
+    async editorBuild() {
+      if (this.editorBuildWorking) return
+      this.editorBuildWorking = true; this.working = true
+      this.progress = 8; this.progressErr = false; this.setStatus('重建 EPUB 中…')
+      try {
+        const r = await this.post('/api/editor/build', { output_path: this.editorBuildOutput })
+        this.outputPath = r.epub_path
+        this.progress = 100; this.setStatus('EPUB 重建完成')
+        this.toast('EPUB 重建完成', this.basename(r.epub_path||''))
+        await this.loadRecent()
+      } catch(e) {
+        this.progressErr = true; this.progress = 0; this.setStatus('重建失败', false)
+        this.toast('重建失败', e.message, false)
+      }
+      this.editorBuildWorking = false; this.working = false
+    },
+
+    async editorSaveSession() {
+      try {
+        await this.post('/api/editor/save-session', {})
+        this.toast('会话已保存', '~/.txt2epub/editor_session.json')
+      } catch(e) { this.toast('保存失败', e.message, false) }
+    },
+
+    async editorRestoreSession() {
+      try {
+        const snap = await this.post('/api/editor/restore-session', {})
+        this.editorTitle       = snap.title       || ''
+        this.editorAuthor      = snap.author      || ''
+        this.editorDescription = snap.description || ''
+        this.editorPublisher   = snap.publisher   || ''
+        this.editorSelected    = -1
+        const lr = await fetch('/api/editor/chapters').then(r=>r.json())
+        this.editorChapters = lr.chapters || []
+        this.editorLoaded   = true
+        this.toast('会话已恢复', `《${snap.title||'未知'}》 ${this.editorChapters.length} 章`)
+      } catch(e) { this.toast('恢复失败', e.message, false) }
+    },
+  }))
+
+})
+</script>
+
 <!-- ══ Alpine app ════════════════════════════════════════════ -->
 <script>
 function app() {
@@ -1415,20 +1921,12 @@ function app() {
       { id:'catalog',  icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
       { id:'adfilter',     icon:'🔧', label:'广告规则',   badge:'', badgeOk:true },
       { id:'chapterRules', icon:'📖', label:'章节规则',   badge:'', badgeOk:true },
+      { id:'editor',       icon:'✏️',  label:'EPUB 编辑器', badge:'', badgeOk:true },
     ],
     convertPath:'', convertTitle:'', convertAuthor:'',
     convertShowCatalog:true, convertWorking:false, convertMeta:{},
     convertTitleEdited:false, convertAuthorEdited:false,
     filterAds:true,
-    adHardKw:[], adSoftKw:[], adThreshold:0.68,
-    adDefaultHardKw:[], adDefaultSoftKw:[], adDefaultThreshold:0.68,
-    adHardKwInput:'', adSoftKwInput:'',
-    adRulesDirty:false, adRulesLoaded:false, adRulesSaving:false,
-    adRulesFilePath:'',
-    chapterPatterns:[], chapterDefaultPatterns:[],
-    chapterRulesFilePath:'',
-    chapterRulesDirty:false, chapterRulesLoaded:false, chapterRulesSaving:false,
-    newChapterPattern:'', chapterDefaultsOpen:false,
     batchDir:'', batchWorking:false, batchResults:[],
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
@@ -1436,7 +1934,6 @@ function app() {
     epubCatalogOpen:false,
     epubStyleOpen:false,
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
-    adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
     coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
     _epubResolve:null,
     coverOptions:[
@@ -1457,7 +1954,7 @@ function app() {
 
     init() {
       document.body.setAttribute('data-theme', this.theme)
-      this.loadRecent(); this.startLogs(); this.loadAdRules(); this.loadChapterRules()
+      this.loadRecent(); this.startLogs()
     },
 
     toggleTheme() {
@@ -1505,101 +2002,6 @@ function app() {
     },
     setStatus(t, ok=true) { this.status=t; this.statusOk=ok },
 
-    async loadAdRules() {
-      try {
-        const r = await fetch('/api/adfilter/rules').then(r=>r.json())
-        this.adHardKw = [...(r.hard_kw||[])]
-        this.adSoftKw = [...(r.soft_kw||[])]
-        this.adThreshold = r.threshold ?? 0.68
-        this.adDefaultHardKw = [...(r.default_hard_kw||[])]
-        this.adDefaultSoftKw = [...(r.default_soft_kw||[])]
-        this.adDefaultThreshold = r.default_threshold ?? 0.68
-        this.adRulesFilePath = r.file_path || ''
-        this.adRulesLoaded = true
-        this.adRulesDirty = false
-      } catch(_) {}
-    },
-
-    async saveAdRules() {
-      this.adRulesSaving = true
-      try {
-        await this.post('/api/adfilter/rules', {
-          hard_kw: this.adHardKw,
-          soft_kw: this.adSoftKw,
-          threshold: parseFloat(this.adThreshold) || 0.68,
-        })
-        this.adRulesDirty = false
-        this.toast('规则已保存', `强匹配 ${this.adHardKw.length} 条 · 软匹配 ${this.adSoftKw.length} 条`)
-      } catch(e) {
-        this.toast('保存失败', e.message, false)
-      }
-      this.adRulesSaving = false
-    },
-
-    resetAdRules() {
-      this.adHardKw = [...this.adDefaultHardKw]
-      this.adSoftKw = [...this.adDefaultSoftKw]
-      this.adThreshold = this.adDefaultThreshold
-      this.adRulesDirty = true
-    },
-
-    addAdHardKw() {
-      const kw = this.adHardKwInput.trim()
-      if (kw && !this.adHardKw.includes(kw)) {
-        this.adHardKw.push(kw); this.adRulesDirty = true
-      }
-      this.adHardKwInput = ''
-    },
-
-    addAdSoftKw() {
-      const kw = this.adSoftKwInput.trim()
-      if (kw && !this.adSoftKw.includes(kw)) {
-        this.adSoftKw.push(kw); this.adRulesDirty = true
-      }
-      this.adSoftKwInput = ''
-    },
-
-    async loadChapterRules() {
-      try {
-        const r = await fetch('/api/chapter/rules').then(r=>r.json())
-        this.chapterPatterns = (r.patterns||[]).map(p=>({...p}))
-        this.chapterDefaultPatterns = r.default_patterns||[]
-        this.chapterRulesFilePath = r.file_path||''
-        this.chapterRulesLoaded = true
-        this.chapterRulesDirty = false
-      } catch(_) {}
-    },
-
-    async saveChapterRules() {
-      this.chapterRulesSaving = true
-      try {
-        await this.post('/api/chapter/rules', { patterns: this.chapterPatterns })
-        this.chapterRulesDirty = false
-        this.toast('章节规则已保存', `自定义规则 ${this.chapterPatterns.length} 条`)
-      } catch(e) {
-        this.toast('保存失败', e.message, false)
-      }
-      this.chapterRulesSaving = false
-    },
-
-    addChapterPattern() {
-      const pat = this.newChapterPattern.trim()
-      if (!pat) return
-      this.chapterPatterns.push({ pattern: pat, enabled: true })
-      this.newChapterPattern = ''
-      this.chapterRulesDirty = true
-    },
-
-    removeChapterPattern(i) {
-      this.chapterPatterns.splice(i, 1)
-      this.chapterRulesDirty = true
-    },
-
-    toggleChapterPattern(i) {
-      this.chapterPatterns[i].enabled = !this.chapterPatterns[i].enabled
-      this.chapterRulesDirty = true
-    },
-
     async post(url, body) {
       const r = await fetch(url, {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1615,7 +2017,6 @@ function app() {
       if (target==='convert') { this.convertPath=r.path; await this.onConvertFileChange() }
       if (target==='epub')    { this.epubPath=r.path;    await this.onEpubFileChange() }
       if (target==='catalog') this.catalogPath=r.path
-      if (target==='adScan')  this.adScanPath=r.path
     },
     async browseDir() {
       const r = await this.post('/api/dialog', { mode:'dir', title:'选择文件夹' })
@@ -1757,18 +2158,6 @@ function app() {
     cancelCover() {
       if (this._epubResolve) this._epubResolve('cancel')
       this._epubResolve = null
-    },
-
-    async doAdScan() {
-      if (!this.adScanPath || this.adScanWorking) return
-      this.adScanWorking = true; this.adScanResults = []; this.adScanDone = false
-      try {
-        const r = await this.post('/api/adfilter/scan', {path: this.adScanPath})
-        this.adScanResults = r.suspicious || []; this.adScanDone = true
-      } catch(e) {
-        this.toast('扫描失败', e.message, false)
-      }
-      this.adScanWorking = false
     },
 
     async doLoadCatalog() {
