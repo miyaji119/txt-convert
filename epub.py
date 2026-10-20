@@ -420,13 +420,11 @@ class EPUBGenerator:
                     _flush()
                     paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
                 else:
-                    if not current:  # 段落第一行：检测是否有手动缩进
-                        noind[0] = line.startswith(('　', ' '))
+                    noind[0] = line.startswith(('　', ' '))
                     line_escaped = html.escape(stripped, quote=True)
                     line_escaped = EPUBGenerator._NOTE_RE.sub(_note_sub, line_escaped)
                     current.append(line_escaped)
-            else:
-                _flush()
+                    _flush()
         _flush()
         if drop_cap and paragraphs:
             for idx, p in enumerate(paragraphs):
