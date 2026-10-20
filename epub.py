@@ -27,10 +27,130 @@ class EPUBGenerator:
     ]
 
     _AUTHOR_NOTE_RE = re.compile(
-        r'^[\s=*]*(作者有话要?说?|作者说|作话|作者留言)[\s:：。=*]{0,10}$'
+        r'^[\s=*]*(作者有话要?说?|作者说|作话|作者留言|作者碎碎念|碎碎念|作者叨叨)[\s:：。=*]{0,10}$'
     )
 
     _SCENE_BREAK_PAT = re.compile(r'^[\*＊·•\s]+$')
+
+    # ── 精排组件检测 ──────────────────────────────────────────────────────────
+    # 系统标签行：【系统通知】内容 / 【提示】任务完成
+    _SYS_TAG_RE = re.compile(
+        r'^[【『\[](系统|System|提示|通知|公告|警告|任务|获得|恭喜|错误|消息|成就|奖励)'
+        r'[^】』\]]{0,15}[】』\]]'
+    )
+    # 行内边框标题：===系统公告=== / ---提示--- （开头和结尾都是 2+ 个相同边框字符）
+    _INLINE_BOX_RE = re.compile(
+        r'^(?P<br>[=*\-━═─◆✦▪]{2,})\s*(?P<title>[^=*\-━═─◆✦▪\n]{1,30}?)\s*(?P=br)\s*$'
+    )
+    # 多行块边框：仅匹配 Unicode 盒子字符（区别于 ASCII scene break）
+    _BOX_BORDER_RE = re.compile(r'^[═━─┄┈✦◆▪■□▬]{5,}\s*$')
+    # 引用行：> 前缀
+    _QUOTE_LINE_RE = re.compile(r'^>{1,3}\s?')
+
+    @staticmethod
+    def _segment_content(content: str) -> list:
+        """将章节内容切分为普通段落和特殊块（系统公告/引用）。
+
+        Returns: list of {'type': 'normal'|'sys-box'|'quote',
+                           'lines': [str], 'title': str|None}
+        """
+        lines = content.split('\n')
+        segments: list = []
+        normal_buf: list = []
+
+        def _flush_normal():
+            if normal_buf:
+                segments.append({'type': 'normal', 'lines': list(normal_buf), 'title': None})
+                normal_buf.clear()
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            # ① Unicode 多行边框块（═══ 内容 ═══）
+            if stripped and EPUBGenerator._BOX_BORDER_RE.match(stripped):
+                j = i + 1
+                block_lines: list = []
+                found_close = False
+                while j < len(lines) and j <= i + 60:
+                    js = lines[j].strip()
+                    if js and EPUBGenerator._BOX_BORDER_RE.match(js):
+                        found_close = True
+                        break
+                    block_lines.append(lines[j])
+                    j += 1
+                non_empty = [l for l in block_lines if l.strip()]
+                if found_close and 1 <= len(non_empty) <= 30:
+                    _flush_normal()
+                    title, content_lines = None, block_lines
+                    first = non_empty[0].strip()
+                    if len(first) <= 20 and not re.search(r'[。！？，、；]', first):
+                        title = first
+                        # 从 block_lines 中去掉标题行
+                        for k, bl in enumerate(block_lines):
+                            if bl.strip() == first:
+                                content_lines = block_lines[k + 1:]
+                                break
+                    segments.append({'type': 'sys-box', 'lines': content_lines, 'title': title})
+                    i = j + 1
+                    continue
+
+            # ② 行内边框标题（===提示=== 单行）
+            m_ib = EPUBGenerator._INLINE_BOX_RE.match(stripped) if stripped else None
+            if m_ib:
+                _flush_normal()
+                segments.append({'type': 'sys-box', 'lines': [], 'title': m_ib.group('title').strip()})
+                i += 1
+                continue
+
+            # ③ 系统标签行（【系统通知】…，可多行）
+            if stripped and EPUBGenerator._SYS_TAG_RE.match(stripped):
+                _flush_normal()
+                m_tag = EPUBGenerator._SYS_TAG_RE.match(stripped)
+                title = m_tag.group(0)
+                rest = stripped[m_tag.end():].strip()
+                if rest:
+                    # tag + 内容同行 → 单行块，不吃后续行
+                    block_lines = [rest]
+                    i += 1
+                else:
+                    # tag 单独一行 → 收集后续非空行直到空行或新特殊行
+                    block_lines = []
+                    j = i + 1
+                    while j < len(lines) and j <= i + 30:
+                        js = lines[j].strip()
+                        if not js:
+                            break
+                        if (EPUBGenerator._SYS_TAG_RE.match(js)
+                                or EPUBGenerator._BOX_BORDER_RE.match(js)):
+                            break
+                        block_lines.append(lines[j])
+                        j += 1
+                    i = j
+                segments.append({'type': 'sys-box', 'lines': block_lines, 'title': title})
+                continue
+
+            # ④ 引用行（> 前缀，连续行组成一个块）
+            if stripped and EPUBGenerator._QUOTE_LINE_RE.match(stripped):
+                _flush_normal()
+                quote_lines: list = []
+                while i < len(lines):
+                    qs = lines[i].strip()
+                    if not EPUBGenerator._QUOTE_LINE_RE.match(qs) and qs:
+                        break
+                    if qs:
+                        quote_lines.append(EPUBGenerator._QUOTE_LINE_RE.sub('', qs).strip())
+                    i += 1
+                if quote_lines:
+                    segments.append({'type': 'quote', 'lines': quote_lines, 'title': None})
+                continue
+
+            normal_buf.append(line)
+            i += 1
+
+        _flush_normal()
+        return segments
 
     # 默认样式预设：scope=inline 包裹 span，scope=block 给整段加 class
     DEFAULT_STYLE_PRESETS = [
@@ -135,6 +255,21 @@ class EPUBGenerator:
         '.header-img{{margin:0;margin-bottom:1em}}.header-img img{{width:100%;display:block}}'
         '.fullpage{{text-align:center;padding:0;margin:0}}'
         '.fullpage img{{max-width:100%;max-height:100vh;display:block;margin:auto}}'
+        '.author-note{{border-left:3px solid #d4c4a8;margin:2.5em 0 1em;'
+        'padding:.7em 1em .7em 1.3em;background:rgba(180,150,100,.04);'
+        'border-radius:0 4px 4px 0}}'
+        '.author-note-hd{{font-size:.8em;color:#b0a090;text-indent:0 !important;'
+        'letter-spacing:.18em;margin:0 0 .6em;font-weight:normal;text-align:left}}'
+        '.author-note p{{font-size:.9em;color:#666;text-indent:0 !important;line-height:1.72;margin:.3em 0}}'
+        '.sys-box{{border:1px solid #b8d0e8;border-left:3px solid #4a90c4;'
+        'background:rgba(74,144,196,.04);margin:1.5em 0;padding:.65em 1em .65em 1.2em;'
+        'border-radius:0 4px 4px 0}}'
+        '.sys-box p{{font-size:.88em;color:#2a4a6a;text-indent:0 !important;line-height:1.7;margin:.22em 0}}'
+        '.sys-hd{{font-size:.78em;font-weight:bold;color:#4a90c4;letter-spacing:.12em;margin-bottom:.4em}}'
+        '.quote-blk{{border-left:3px solid #d8d8d8;margin:1.2em 0;'
+        'padding:.4em 0 .4em 1.1em;background:rgba(0,0,0,.015)}}'
+        '.quote-blk p{{font-size:.9em;color:#555;text-indent:0 !important;'
+        'line-height:1.72;margin:.18em 0;font-style:italic}}'
     )
 
     @classmethod
@@ -190,13 +325,13 @@ class EPUBGenerator:
         """
         lines = content.split('\n')
         note_start = None
-        for i in range(len(lines) - 1, -1, -1):
+        # 只在末尾 60 行内反向扫描，避免误匹配正文中偶尔引用的"作者有话说"
+        search_limit = max(0, len(lines) - 60)
+        for i in range(len(lines) - 1, search_limit - 1, -1):
             stripped = lines[i].strip()
-            if not stripped or re.match(r'^=+$', stripped):
-                continue
             if EPUBGenerator._AUTHOR_NOTE_RE.match(stripped):
                 note_start = i
-            break
+                break
         if note_start is None:
             return content, None
 
@@ -212,6 +347,60 @@ class EPUBGenerator:
             note_body_lines.pop()
 
         return '\n'.join(main_lines), '\n'.join(note_body_lines)
+
+    # 章节号前缀：第X章/卷/节/回 开头 → 不视为可剥离前缀
+    _CH_NUM_PREFIX = re.compile(
+        r'^第[一二三四五六七八九十百千万零\d]+[章节卷回部]'
+    )
+    # 标题内重复章节号：「第一章第一章 缘起」→ 去重
+    _CH_DUP_RE = re.compile(
+        r'^(第[一二三四五六七八九十百千万零\d]+[章节卷回部])\s*\1'
+    )
+
+    _INTRO_TITLES = frozenset({'文案简介', '前言', '序章', '楔子'})
+
+    @staticmethod
+    def _clean_title_prefix(chapters: list) -> list:
+        """去除章节标题中的聚合站冗余前缀（书名标注、重复章节号等）。
+
+        1. 公共前缀：若 ≥60% 的章节标题共享同一前缀（≥2 字符），且该前缀不是
+           有效章节号格式，则剥离。
+        2. 标题内重复：如「第一章第一章 缘起」，去掉重复的章节号。
+        """
+        # 只在真正的章节上统计（排除简介/前言/卷标题等空内容章节）
+        real_chs = [
+            ch for ch in chapters
+            if ch['title'] not in EPUBGenerator._INTRO_TITLES
+            and ch.get('content', '').strip()
+        ]
+        if len(real_chs) >= 3:
+            titles = [ch['title'] for ch in real_chs]
+            prefix = os.path.commonprefix(titles)
+            # 将前缀从右侧收缩到最近的分隔符/括号边界，避免截断「第一章」中的「第」
+            _SEP_CHARS = frozenset('《》「」【】\t\r\n ,，.:：。！？!?、—-_/ ')
+            i = len(prefix) - 1
+            while i >= 0 and prefix[i] not in _SEP_CHARS:
+                i -= 1
+            prefix = prefix[:i + 1]
+            if (len(prefix) >= 2
+                    and not EPUBGenerator._CH_NUM_PREFIX.match(prefix)
+                    and sum(1 for t in titles if t.startswith(prefix)) / len(titles) >= 0.6):
+                # 剥离公共前缀，并清理剩余的前导标点/空白
+                _leading_punct = re.compile(r'^[《》「」【】\s,，.:：。！？!?、—\-_]+')
+                for ch in chapters:
+                    if (ch['title'] not in EPUBGenerator._INTRO_TITLES
+                            and ch['title'].startswith(prefix)):
+                        trimmed = _leading_punct.sub('', ch['title'][len(prefix):]).strip()
+                        if trimmed:
+                            ch['title'] = trimmed
+
+        # 去除标题内重复章节号（「第一章第一章 缘起」→「第一章 缘起」）
+        for ch in chapters:
+            m = EPUBGenerator._CH_DUP_RE.match(ch['title'])
+            if m:
+                ch['title'] = (ch['title'][m.end(1):]).lstrip()
+
+        return chapters
 
     @staticmethod
     def _extract_author(content: str) -> Optional[str]:
@@ -388,8 +577,6 @@ class EPUBGenerator:
         content = EPUBGenerator._clean_chapter_content(content)
         content = EPUBGenerator._merge_dialogue_splits(content)
         paragraphs = []
-        current = []
-        noind = [False]
         notes: list = []   # 收集脚注 [(k, note_text)]
 
         def _note_sub(m):
@@ -398,34 +585,44 @@ class EPUBGenerator:
             return (f'<a epub:type="noteref" href="#fn_{ch_idx}_{k}"'
                     f' id="fnref_{ch_idx}_{k}">[注{k}]</a>')
 
-        def _flush():
-            if not current:
-                return
-            text = ''.join(current)
-            cls = ' class="noind"' if noind[0] else ''
-            # block scope：若整段匹配某个 block_pats 规则，给 <p> 加额外 class
-            if block_pats and not noind[0]:
-                for rx, bkey in (block_pats or []):
-                    if rx.search(text):
+        def _render_normal_line(line: str):
+            """将单行普通正文渲染为 <p> 标签，返回 None 表示空行跳过。"""
+            stripped = line.strip()
+            if not stripped:
+                return None
+            if EPUBGenerator._SCENE_BREAK_PAT.match(stripped):
+                return f'<p class="scene-break">{html.escape(stripped)}</p>'
+            noind = line.startswith(('　', ' '))
+            cls = ' class="noind"' if noind else ''
+            if block_pats and not noind:
+                for rx, bkey in block_pats:
+                    if rx.search(stripped):
                         cls = f' class="{bkey}"'
                         break
-            paragraphs.append(f'<p{cls}>{EPUBGenerator._apply_dialogue_spans(text, inline_pats)}</p>')
-            current.clear()
-            noind[0] = False
+            line_esc = html.escape(stripped, quote=True)
+            line_esc = EPUBGenerator._NOTE_RE.sub(_note_sub, line_esc)
+            return f'<p{cls}>{EPUBGenerator._apply_dialogue_spans(line_esc, inline_pats)}</p>'
 
-        for line in content.split('\n'):
-            stripped = line.strip()
-            if stripped:
-                if EPUBGenerator._SCENE_BREAK_PAT.match(stripped):
-                    _flush()
-                    paragraphs.append(f'<p class="scene-break">{html.escape(stripped)}</p>')
-                else:
-                    noind[0] = line.startswith(('　', ' '))
-                    line_escaped = html.escape(stripped, quote=True)
-                    line_escaped = EPUBGenerator._NOTE_RE.sub(_note_sub, line_escaped)
-                    current.append(line_escaped)
-                    _flush()
-        _flush()
+        for seg in EPUBGenerator._segment_content(content):
+            if seg['type'] == 'normal':
+                for line in seg['lines']:
+                    p = _render_normal_line(line)
+                    if p:
+                        paragraphs.append(p)
+            elif seg['type'] == 'sys-box':
+                inner: list = []
+                if seg.get('title'):
+                    inner.append(f'<p class="sys-hd">{html.escape(seg["title"])}</p>')
+                for line in seg['lines']:
+                    s = line.strip()
+                    if s:
+                        inner.append(f'<p>{html.escape(s)}</p>')
+                if inner:
+                    paragraphs.append(f'<div class="sys-box">{"".join(inner)}</div>')
+            elif seg['type'] == 'quote':
+                inner = [f'<p>{html.escape(l)}</p>' for l in seg['lines'] if l]
+                if inner:
+                    paragraphs.append(f'<blockquote class="quote-blk">{"".join(inner)}</blockquote>')
         if drop_cap and paragraphs:
             for idx, p in enumerate(paragraphs):
                 if p.startswith('<p>') and len(p) > 4:
@@ -570,6 +767,7 @@ class EPUBGenerator:
                 chapters = EPUBGenerator._parse_chapters(content)
                 if not chapters:
                     chapters = [{'title': book_title if book_title else "正文", 'content': content}]
+                chapters = EPUBGenerator._clean_title_prefix(chapters)
 
             # 手动卷分配：在指定章节前插入卷标题章节（_VOLUME_RE 会自动识别生成两级 TOC）
             if volume_map:
@@ -582,6 +780,13 @@ class EPUBGenerator:
                         inserted_vols.add(vol_name)
                     result_chs.append(ch)
                 chapters = result_chs
+
+            # 若未显式提供 description，从文案简介/前言章节自动提取
+            if not description and chapters:
+                for _ch in chapters:
+                    if _ch['title'] in ('文案简介', '前言') and _ch.get('content', '').strip():
+                        description = _ch['content'].strip()
+                        break
 
             if not book_title:
                 if content:
@@ -835,7 +1040,10 @@ class EPUBGenerator:
                         has_author_note = True
                         note_html = EPUBGenerator._chapter_to_html(note_body) if note_body.strip() else ''
                         html_content += (
-                            '\n<h2 id="author-note">作者有话要说</h2>\n' + note_html
+                            '\n<div class="author-note" id="author-note">'
+                            '\n<p class="author-note-hd">作者有话要说</p>\n'
+                            + note_html +
+                            '\n</div>'
                         )
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
                 # 头图（仅正文章节，按轮换索引选取）

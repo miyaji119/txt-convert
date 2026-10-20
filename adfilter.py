@@ -57,6 +57,28 @@ class AdFilter:
     _SOFT_KW = ['书友', '更新最快', '收藏推荐', '关注', '手机看书', '下载', '求订阅']
 
     @classmethod
+    def _split_url_indices(cls, lines: list) -> set:
+        """检测被换行拆开的推广网址，返回需要追加标记的行的 0-indexed 索引集合。
+
+        只处理 s1 未独立命中的情况：若拼接 window 命中 URL，则 s1 是「域名前半/
+        邀请语」，应补标记；s2 若独立命中则已在单行扫描中处理，若未命中则也补标记。
+        当 s1 已独立命中时跳过（s2 是 URL 之后的内容，不应连累删除）。
+        """
+        suspicious: set = set()
+        for i in range(len(lines) - 1):
+            s1, s2 = lines[i].strip(), lines[i + 1].strip()
+            if not s1 or not s2:
+                continue
+            if cls._URL_RE.search(s1):
+                continue  # s1 已独立命中；s2 是其后内容，不牵连
+            window = s1[-50:] + s2[:50]
+            if cls._URL_RE.search(window):
+                suspicious.add(i)          # s1 是被拆开 URL 的前半部分
+                if not cls._URL_RE.search(s2):
+                    suspicious.add(i + 1)  # s2 是后半部分且未独立命中
+        return suspicious
+
+    @classmethod
     def _score(cls, line: str, near_boundary: bool = False,
                hard_kw=None, soft_kw=None) -> float:
         s = line.strip()
@@ -112,6 +134,7 @@ class AdFilter:
         lines = content.split('\n')
         n = len(lines)
         result = []
+        already: set = set()
         for i, line in enumerate(lines):
             sc = cls._score(
                 line,
@@ -120,6 +143,13 @@ class AdFilter:
             )
             if sc >= threshold:
                 result.append({'line_num': i + 1, 'score': round(sc, 3), 'text': line.strip()})
+                already.add(i)
+        # 检测被换行拆开的推广网址
+        for i in cls._split_url_indices(lines):
+            if i not in already:
+                result.append({'line_num': i + 1, 'score': 0.85, 'text': lines[i].strip()})
+                already.add(i)
+        result.sort(key=lambda r: r['line_num'])
         return result
 
     @classmethod
@@ -153,6 +183,10 @@ class AdFilter:
         ]
 
         removed: Set[int] = set()
+
+        # 将跨行拆分 URL 的两行分值提升到 0.85，使其进入单行过滤
+        for i in cls._split_url_indices(lines):
+            scores[i] = max(scores[i], 0.85)
 
         # 单行过滤
         for i, sc in enumerate(scores):

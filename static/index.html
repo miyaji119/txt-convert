@@ -320,7 +320,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 box-shadow:0 2px 12px rgba(217,119,6,.3);">📚</div>
     <span style="font-weight:600; color:var(--text); letter-spacing:-.01em;">TXT → EPUB</span>
     <span style="font-size:10px; padding:2px 7px; border-radius:5px;
-                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.8</span>
+                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.10</span>
   </div>
   <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
     <button @click="toggleTheme()"
@@ -667,8 +667,16 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 </thead>
                 <tbody>
                   <template x-for="(ch,i) in $store.catalog.chapters" :key="i">
-                    <tr @click="catalogSelectRow(i)" style="cursor:pointer;"
-                        :style="$store.catalog.selected===i ? 'background:rgba(217,119,6,.08);' : ''">
+                    <tr @click="catalogSelectRow(i)"
+                        draggable="true"
+                        @dragstart="catalogDragStart(i)"
+                        @dragover.prevent="$store.catalog._dragOver=i"
+                        @drop.prevent="catalogDrop(i)"
+                        @dragend="catalogDragEnd()"
+                        style="cursor:grab;"
+                        :style="$store.catalog._dragOver===i
+                          ? 'background:rgba(217,119,6,.14); box-shadow:inset 0 2px 0 #d97706;'
+                          : ($store.catalog.selected===i ? 'background:rgba(217,119,6,.08);' : '')">
                       <td class="tbl-td"
                           style="font-family:'JetBrains Mono',monospace; font-size:11px;
                                  color:var(--dim); width:56px;"
@@ -786,6 +794,22 @@ tr:hover td { background: rgba(255,255,255,.015); }
                       placeholder="span.dlg-cn { color: #4a6fa5; }&#10;span.dlg-sq { font-style: italic; }"
                       style="font-family:'JetBrains Mono',monospace; font-size:12px; resize:vertical;"></textarea>
           </div>
+          <!-- 实时排版预览 -->
+          <div>
+            <span class="sublbl">排版预览</span>
+            <div style="border-radius:7px; overflow:hidden; border:1px solid var(--border);">
+              <div style="background:#ffffff; color:#1a1a1a;
+                          font-family:'Noto Serif SC',serif; font-size:15px;"
+                   :style="`padding: 16px ${epubMargin.split(' ').pop()};`">
+                <p :style="`line-height:${epubLineHeight}; text-indent:${epubTextIndent}; margin-bottom:${epubLineHeight * 0.4}em;`">
+                  这是正文段落示例。秋风吹过，叶落知秋，岁月匆匆，转眼又是一年光景。她回过头，窗外的银杏叶正一片片落下，像是时光的印记。
+                </p>
+                <p :style="`line-height:${epubLineHeight}; text-indent:${epubTextIndent};`">
+                  "你来了。"他站在门口，声音平静，却藏着几分意外的欣喜。她微微颔首，没有说话，只是推开了那扇虚掩的门。
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -893,10 +917,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </thead>
             <tbody>
               <template x-for="(ch,i) in $store.catalog.chapters" :key="i">
-                <tr @click="catalogSelectRow(i)" style="cursor:pointer;"
-                    :style="$store.catalog.selected===i
-                      ? 'background:rgba(217,119,6,.08);'
-                      : ''">
+                <tr @click="catalogSelectRow(i)"
+                    draggable="true"
+                    @dragstart="catalogDragStart(i)"
+                    @dragover.prevent="$store.catalog._dragOver=i"
+                    @drop.prevent="catalogDrop(i)"
+                    @dragend="catalogDragEnd()"
+                    style="cursor:grab;"
+                    :style="$store.catalog._dragOver===i
+                      ? 'background:rgba(217,119,6,.14); box-shadow:inset 0 2px 0 #d97706;'
+                      : ($store.catalog.selected===i
+                          ? 'background:rgba(217,119,6,.08);'
+                          : '')">
                   <td class="tbl-td"
                       style="font-family:'JetBrains Mono',monospace; font-size:11px;
                              color:var(--dim); width:56px;"
@@ -946,10 +978,29 @@ tr:hover td { background: rgba(255,255,255,.015); }
              style="font-size:12px; color:var(--muted); padding:4px 0;">
           未发现可疑行（当前阈值 <span x-text="adThreshold"></span>）
         </div>
+
+        <!-- 选择工具栏 -->
+        <div x-show="adScanResults.length>0"
+             style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+          <button class="btn btn-ghost" style="padding:3px 9px; font-size:11px;"
+                  @click="adSelectAll()">全选</button>
+          <button class="btn btn-ghost" style="padding:3px 9px; font-size:11px;"
+                  @click="adDeselectAll()">取消全选</button>
+          <button class="btn btn-ghost"
+                  style="padding:3px 9px; font-size:11px; color:#f87171; border-color:rgba(248,113,113,.2);"
+                  @click="adSelectHigh()">仅选高置信 ≥0.85</button>
+          <span style="margin-left:auto; font-size:11px; color:var(--muted);">
+            已选 <span style="color:var(--text); font-weight:500;" x-text="adSelectedCount()"></span>
+            / <span x-text="adScanResults.length"></span> 行
+          </span>
+        </div>
+
+        <!-- 结果表格 -->
         <div x-show="adScanResults.length>0" style="max-height:280px; overflow-y:auto;">
           <table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead>
               <tr style="border-bottom:1px solid var(--border); color:var(--dim);">
+                <th style="width:28px; padding:4px 6px;"></th>
                 <th style="text-align:left; padding:4px 6px; width:52px;">行号</th>
                 <th style="text-align:left; padding:4px 6px; width:52px;">得分</th>
                 <th style="text-align:left; padding:4px 6px;">内容</th>
@@ -957,7 +1008,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </thead>
             <tbody>
               <template x-for="r in adScanResults" :key="r.line_num">
-                <tr style="border-bottom:1px solid var(--border);">
+                <tr style="border-bottom:1px solid var(--border); cursor:pointer;"
+                    :style="adScanSelected[r.line_num] ? 'background:rgba(217,119,6,.06);' : ''"
+                    @click="adScanSelected[r.line_num] = !adScanSelected[r.line_num]">
+                  <td style="padding:4px 6px; text-align:center;">
+                    <input type="checkbox"
+                           :checked="!!adScanSelected[r.line_num]"
+                           @click.stop
+                           @change="adScanSelected[r.line_num] = $event.target.checked">
+                  </td>
                   <td style="padding:4px 6px; color:var(--dim); font-variant-numeric:tabular-nums;"
                       x-text="r.line_num"></td>
                   <td style="padding:4px 6px; font-variant-numeric:tabular-nums;"
@@ -969,9 +1028,33 @@ tr:hover td { background: rgba(255,255,255,.015); }
               </template>
             </tbody>
           </table>
-          <p style="font-size:11px; color:var(--dim); margin-top:6px;">
+        </div>
+
+        <!-- 底部：计数 + 删除按钮 -->
+        <div x-show="adScanResults.length>0"
+             style="display:flex; align-items:center; justify-content:space-between;
+                    flex-wrap:wrap; gap:8px; margin-top:6px;">
+          <p style="font-size:11px; color:var(--dim);">
             共 <span x-text="adScanResults.length"></span> 行可疑内容
           </p>
+          <button class="btn btn-amber" style="padding:5px 14px; font-size:12px;"
+                  @click="doAdDelete()"
+                  :disabled="adSelectedCount()===0 || adDeleteWorking">
+            <span x-show="adDeleteWorking" class="spin"></span>
+            <span x-text="adDeleteWorking ? '删除中…' : '🗑 删除选中 (' + adSelectedCount() + ' 行)'"></span>
+          </button>
+        </div>
+
+        <!-- 删除成功后显示输出路径 -->
+        <div x-show="adDeleteOutput"
+             style="margin-top:8px; padding:8px 12px;
+                    background:rgba(52,211,153,.05); border:1px solid rgba(52,211,153,.15);
+                    border-radius:6px; font-size:12px; display:flex; align-items:center; gap:8px;">
+          <span style="color:var(--muted);">输出：</span>
+          <span style="color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                x-text="basename(adDeleteOutput)"></span>
+          <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
+                  @click="openFile(adDeleteOutput)">在 Finder 中显示</button>
         </div>
       </div>
 
@@ -1619,6 +1702,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.store('catalog', {
     path:'', chapters:[], stats:{}, working:false,
     selected:-1, editNum:'', editTitle:'', changes:0, saving:false,
+    _dragIdx:-1, _dragOver:-1,
   })
 
   // ── 广告规则面板 ─────────────────────────────────────────────
@@ -1629,6 +1713,7 @@ document.addEventListener('alpine:init', () => {
     adRulesDirty:false, adRulesLoaded:false, adRulesSaving:false,
     adRulesFilePath:'',
     adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
+    adScanSelected:{}, adDeleteWorking:false, adDeleteOutput:'',
 
     init() { this.loadAdRules() },
 
@@ -1684,7 +1769,13 @@ document.addEventListener('alpine:init', () => {
       this.adScanWorking = true; this.adScanResults = []; this.adScanDone = false
       try {
         const r = await this.post('/api/adfilter/scan', {path: this.adScanPath})
-        this.adScanResults = r.suspicious || []; this.adScanDone = true
+        this.adScanResults = r.suspicious || []
+        this.adScanSelected = {}
+        for (const item of this.adScanResults) {
+          if (item.score >= 0.85) this.adScanSelected[item.line_num] = true
+        }
+        this.adDeleteOutput = ''
+        this.adScanDone = true
       } catch(e) { this.toast('扫描失败', e.message, false) }
       this.adScanWorking = false
     },
@@ -1692,6 +1783,38 @@ document.addEventListener('alpine:init', () => {
     async adScanBrowse() {
       const r = await this.post('/api/dialog', { mode:'file', title:'选择要扫描的 TXT 文件' })
       if (r.path) this.adScanPath = r.path
+    },
+
+    adSelectedCount() {
+      return Object.values(this.adScanSelected).filter(Boolean).length
+    },
+    adSelectAll() {
+      const s = {}
+      for (const r of this.adScanResults) s[r.line_num] = true
+      this.adScanSelected = s
+    },
+    adDeselectAll() { this.adScanSelected = {} },
+    adSelectHigh() {
+      const s = {}
+      for (const r of this.adScanResults) if (r.score >= 0.85) s[r.line_num] = true
+      this.adScanSelected = s
+    },
+    async doAdDelete() {
+      const nums = Object.entries(this.adScanSelected)
+        .filter(([,v]) => v).map(([k]) => parseInt(k))
+      if (!nums.length || this.adDeleteWorking) return
+      this.adDeleteWorking = true
+      try {
+        const res = await this.post('/api/adfilter/delete', {
+          path: this.adScanPath, line_nums: nums,
+        })
+        this.adDeleteOutput = res.output_path || ''
+        this.toast('广告已删除', `${res.removed} 行 → ${this.basename(res.output_path||'')}`)
+        const delSet = new Set(nums)
+        this.adScanResults = this.adScanResults.filter(r => !delSet.has(r.line_num))
+        this.adScanSelected = {}
+      } catch(e) { this.toast('删除失败', e.message, false) }
+      this.adDeleteWorking = false
     },
   }))
 
@@ -2229,6 +2352,23 @@ function app() {
       cs.selected = i - 1
       this._catalogRenumber()
       cs.changes++
+    },
+
+    catalogDragStart(i) { this.$store.catalog._dragIdx = i },
+    catalogDrop(i) {
+      const cs = this.$store.catalog
+      const from = cs._dragIdx
+      cs._dragIdx = -1; cs._dragOver = -1
+      if (from < 0 || from === i) return
+      const [ch] = cs.chapters.splice(from, 1)
+      cs.chapters.splice(i, 0, ch)
+      cs.selected = i
+      this._catalogRenumber()
+      cs.changes++
+    },
+    catalogDragEnd() {
+      this.$store.catalog._dragIdx = -1
+      this.$store.catalog._dragOver = -1
     },
 
     catalogMoveDown() {
