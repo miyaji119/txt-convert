@@ -307,6 +307,8 @@ class EpubReq(BaseModel):
     fonts: dict = {}
     # 插图页：[{"path": "/path/img.jpg", "after_chapter": 0, "caption": ""}]
     illustrations: list = []
+    # 自动生成封面风格（空字符串 = 不生成；"minimal_light" 等见 cover_gen.py）
+    generate_cover_style: str = ""
 
 
 @app.post("/api/epub")
@@ -337,9 +339,8 @@ async def api_epub(req: EpubReq):
             req.header_images or None,
             req.fonts or None,
             req.illustrations or None,
+            generate_cover_style=req.generate_cover_style or "",
         )
-        if not epub_path:
-            raise RuntimeError("EPUB 生成失败")
         return epub_path
 
     try:
@@ -1068,6 +1069,7 @@ class EditorBuildReq(BaseModel):
     header_images: list = []
     fonts: dict = {}
     illustrations: list = []
+    generate_cover_style: str = ""
 
 
 @app.post("/api/editor/build")
@@ -1103,6 +1105,7 @@ async def api_editor_build(req: EditorBuildReq):
             req.header_images or None,
             req.fonts or None,
             req.illustrations or None,
+            generate_cover_style=req.generate_cover_style or "",
             chapters=chapters,
         )
         if not epub_path:
@@ -1188,6 +1191,30 @@ async def search_covers(req: SearchCoverReq):
             for c in candidates[:12]
         ]
     }
+
+
+@app.get("/api/epub/cover-styles")
+async def cover_styles():
+    from cover_gen import list_styles
+    return {"styles": list_styles()}
+
+
+class PreviewCoverReq(BaseModel):
+    title: str
+    author: str = ""
+    style: str = "minimal_light"
+
+
+@app.post("/api/epub/preview-cover")
+async def preview_cover(req: PreviewCoverReq):
+    import base64
+    from cover_gen import generate_cover as _gen
+    loop = asyncio.get_running_loop()
+    img_bytes = await loop.run_in_executor(
+        executor,
+        lambda: _gen(req.title or "书名", req.author, req.style, thumb=True),
+    )
+    return {"data_url": "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()}
 
 
 @app.get("/api/cover-proxy")

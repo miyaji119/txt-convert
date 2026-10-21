@@ -749,7 +749,8 @@ class EPUBGenerator:
                     header_images: list = None,
                     fonts: dict = None,
                     illustrations: list = None,
-                    chapters: list = None) -> Optional[str]:
+                    chapters: list = None,
+                    generate_cover_style: str = "") -> Optional[str]:
         """将TXT文件（或预解析章节列表）转换为EPUB。
 
         当 chapters 不为 None 时跳过文件读取，直接使用传入的章节列表；
@@ -838,6 +839,19 @@ class EPUBGenerator:
             if auto_search_cover and not actual_cover_path:
                 os.makedirs(_asset_dir, exist_ok=True)
                 actual_cover_path = CoverDownloader.search_and_download_cover(book_title, author or "", _asset_dir)
+
+            if generate_cover_style and not actual_cover_path:
+                try:
+                    from cover_gen import generate_cover as _gen_cover
+                    _cover_bytes = _gen_cover(book_title, author or "", generate_cover_style)
+                    os.makedirs(_asset_dir, exist_ok=True)
+                    _tmp_cover = os.path.join(_asset_dir, 'cover_generated.jpg')
+                    with open(_tmp_cover, 'wb') as f:
+                        f.write(_cover_bytes)
+                    actual_cover_path = _tmp_cover
+                    print(f"✅ 生成封面: {generate_cover_style}")
+                except Exception as e:
+                    print(f"⚠️ 封面生成失败: {e}")
 
             if actual_cover_path and os.path.exists(actual_cover_path):
                 try:

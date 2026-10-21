@@ -748,7 +748,51 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <div x-show="epubCoverChoice==='url'">
           <input class="inp" type="text" x-model="epubCoverUrl" placeholder="https://…">
         </div>
-      </div>
+
+        <!-- 自动生成风格选择 -->
+        <div x-show="epubCoverChoice==='generate'" style="margin-top:10px;">
+          <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:10px;">
+            <template x-for="s in epubCoverStyles" :key="s.key">
+              <div @click="selectCoverStyle(s.key)"
+                   :style="`background:linear-gradient(to bottom,${s.thumb_bg},${s.thumb_bg_end||s.thumb_bg});
+                            border-radius:7px; padding:7px 4px 5px; cursor:pointer;
+                            border:2px solid ${epubCoverStyle===s.key?'#d97706':'transparent'};
+                            text-align:center; transition:border-color .15s; user-select:none;`">
+                <div :style="`height:48px; border-radius:4px; overflow:hidden;
+                              display:flex; flex-direction:column; align-items:center;
+                              justify-content:center; margin-bottom:5px; gap:3px;`">
+                  <span :style="`font-size:10px; font-weight:700; color:${s.thumb_text_color};
+                                  letter-spacing:.3px;`"
+                        x-text="s.mock_title"></span>
+                  <div :style="`width:55%; height:1px; background:${s.thumb_accent}; opacity:.7;`"></div>
+                  <span :style="`font-size:8px; color:${s.thumb_sub_color}; opacity:.9;`"
+                        x-text="s.mock_author"></span>
+                </div>
+                <span style="font-size:10px; color:var(--muted);" x-text="s.name"></span>
+              </div>
+            </template>
+          </div>
+          <div x-show="epubCoverPreviewUrl || epubCoverPreviewLoading"
+               style="display:flex; align-items:flex-start; gap:12px; margin-top:4px;">
+            <div style="width:72px; flex-shrink:0;">
+              <div x-show="epubCoverPreviewLoading"
+                   style="width:72px; height:108px; border-radius:5px;
+                          background:var(--surface2); display:flex; align-items:center; justify-content:center;">
+                <span class="spin"></span>
+              </div>
+              <img x-show="epubCoverPreviewUrl && !epubCoverPreviewLoading"
+                   :src="epubCoverPreviewUrl"
+                   style="width:72px; height:108px; border-radius:5px; object-fit:cover;
+                          box-shadow:0 2px 8px rgba(0,0,0,.35);">
+            </div>
+            <div style="font-size:11px; color:var(--muted); padding-top:6px; line-height:1.5;">
+              <p x-text="epubCoverStyles.find(s=>s.key===epubCoverStyle)?.desc||''"></p>
+              <p style="margin-top:5px; color:var(--dim);">600 × 900 px · 自动排版</p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /封面选项 card -->
 
       <!-- 排版样式（可折叠） -->
       <div class="card" style="margin-bottom:16px;">
@@ -2131,6 +2175,8 @@ function app() {
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
     epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false,
+    epubCoverStyle:'minimal_light', epubCoverStyles:[],
+    epubCoverPreviewUrl:'', epubCoverPreviewLoading:false,
     epubCatalogOpen:false,
     epubStyleOpen:false,
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
@@ -2140,7 +2186,8 @@ function app() {
       { value:'none',  label:'无封面' },
       { value:'local', label:'本地图片' },
       { value:'url',   label:'图片 URL' },
-      { value:'auto',  label:'自动搜索' },
+      { value:'auto',     label:'自动搜索' },
+      { value:'generate', label:'自动生成' },
     ],
     logs:[], logVisible:true,
     outputPath:'', progress:0, progressErr:false,
@@ -2152,6 +2199,7 @@ function app() {
     init() {
       document.body.setAttribute('data-theme', this.theme)
       this.loadRecent(); this.startLogs()
+      this.loadCoverStyles()
     },
 
     toggleTheme() {
@@ -2219,6 +2267,29 @@ function app() {
       if (r.path) this.epubCoverPath=r.path
     },
 
+    async loadCoverStyles() {
+      try {
+        const r = await fetch('/api/epub/cover-styles').then(r=>r.json())
+        this.epubCoverStyles = r.styles || []
+      } catch(_) {}
+    },
+    async selectCoverStyle(key) {
+      this.epubCoverStyle = key
+      this.epubCoverPreviewUrl = ''
+      const title = this.epubTitle || this.epubAuthor ? (this.epubTitle || '书名示例') : ''
+      if (!title) return
+      this.epubCoverPreviewLoading = true
+      try {
+        const r = await this.post('/api/epub/preview-cover', {
+          title: this.epubTitle || '书名示例',
+          author: this.epubAuthor || '作者',
+          style: key,
+        })
+        this.epubCoverPreviewUrl = r.data_url || ''
+      } catch(_) {}
+      this.epubCoverPreviewLoading = false
+    },
+
     async onEpubFileChange() {
       if (!this.epubPath) return
       this.epubTitleEdited=false; this.epubAuthorEdited=false; this.epubCatalogOpen=false
@@ -2235,6 +2306,11 @@ function app() {
 
     async doEpub() {
       if (!this.epubPath || this.epubWorking || this.coverSearching) return
+
+      if (this.epubCoverChoice === 'generate') {
+        await this._generateEpub('', '', this.epubCoverStyle)
+        return
+      }
 
       if (this.epubCoverChoice === 'auto') {
         const title = this.epubTitle || ''
@@ -2259,17 +2335,19 @@ function app() {
 
       await this._generateEpub(
         this.epubCoverChoice === 'local' ? this.epubCoverPath : '',
-        this.epubCoverChoice === 'url'   ? this.epubCoverUrl  : ''
+        this.epubCoverChoice === 'url'   ? this.epubCoverUrl  : '',
+        ''
       )
     },
 
-    async _generateEpub(coverImage, coverUrl) {
+    async _generateEpub(coverImage, coverUrl, genStyle='') {
       this.epubWorking=true; this.working=true
       this.progress=8; this.progressErr=false; this.setStatus('生成 EPUB 中…')
       try {
         const r = await this.post('/api/epub', {
           path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
           cover_image: coverImage||'', cover_url: coverUrl||'', auto_search_cover:false,
+          generate_cover_style: genStyle||'',
           filter_ads:this.filterAds,
           margin:this.epubMargin, line_height:this.epubLineHeight,
           text_indent:this.epubTextIndent, custom_css:this.epubCustomCss,
