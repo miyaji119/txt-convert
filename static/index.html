@@ -435,6 +435,20 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </button>
       </div>
 
+      <!-- 转换完成快捷跳转 -->
+      <div x-show="outputPath && !convertWorking"
+           style="margin-bottom:12px; padding:10px 14px; border-radius:9px;
+                  background:rgba(52,211,153,.06); border:1px solid rgba(52,211,153,.18);
+                  display:flex; align-items:center; gap:10px;">
+        <span style="font-size:11px; color:#34d399; flex:1; overflow:hidden;
+                     text-overflow:ellipsis; white-space:nowrap;"
+              x-text="'✓ ' + (basename(outputPath)||'转换完成')"></span>
+        <button class="btn btn-amber" style="padding:5px 14px; font-size:12px; flex-shrink:0;"
+                @click="page='epub'; $nextTick(()=>{ $dispatch('set-epub-path', outputPath) })">
+          → 生成 EPUB
+        </button>
+      </div>
+
       <div x-show="convertMeta.name" class="card">
         <span class="lbl">文件信息</span>
         <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; text-align:center;">
@@ -524,10 +538,16 @@ tr:hover td { background: rgba(255,255,255,.015); }
               <tr>
                 <td class="tbl-td" style="color:var(--text); max-width:240px;
                            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    :title="r.filename||r.file||''"
                     x-text="r.filename||r.file||'—'"></td>
                 <td class="tbl-td" style="text-align:center;">
                   <span :class="r.error?'pill-err':'pill-ok'" class="pill"
+                        :title="r.error||''"
                         x-text="r.error?'失败':'✓ 成功'"></span>
+                  <div x-show="r.error" style="font-size:10px; color:#f87171; margin-top:3px;
+                               max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                       :title="r.error||''"
+                       x-text="r.error ? r.error.slice(0,40)+(r.error.length>40?'…':'') : ''"></div>
                 </td>
                 <td class="tbl-td" style="text-align:center; color:var(--muted);"
                     x-text="r.chapters??'—'"></td>
@@ -542,7 +562,8 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
     <!-- ── 生成 EPUB ──────────────────────────────────── -->
     <div x-show="page==='epub'" class="page"
-         style="max-width:620px; margin:0 auto; padding:32px 24px;">
+         style="max-width:620px; margin:0 auto; padding:32px 24px;"
+         @set-epub-path.window="epubPath=$event.detail; onEpubFileChange()">
       <div style="margin-bottom:24px;">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">生成 EPUB</h1>
@@ -735,7 +756,8 @@ tr:hover td { background: rgba(255,255,255,.015); }
             <label style="display:flex; align-items:center; gap:7px;
                           cursor:pointer; user-select:none; color:var(--muted);">
               <input type="radio" :value="opt.value" x-model="epubCoverChoice"
-                     style="accent-color:#d97706; cursor:pointer;">
+                     style="accent-color:#d97706; cursor:pointer;"
+                     @change="opt.value==='generate' && epubTitle && selectCoverStyle(epubCoverStyle)">
               <span x-text="opt.label"></span>
             </label>
           </template>
@@ -751,6 +773,13 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
         <!-- 自动生成风格选择 -->
         <div x-show="epubCoverChoice==='generate'" style="margin-top:10px;">
+          <!-- 未填书名提示 -->
+          <div x-show="!epubTitle"
+               style="font-size:11px; color:var(--muted); margin-bottom:8px;
+                      padding:6px 10px; border-radius:6px;
+                      background:rgba(217,119,6,.06); border:1px solid rgba(217,119,6,.15);">
+            填写书名后可预览封面效果
+          </div>
           <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:10px;">
             <template x-for="s in epubCoverStyles" :key="s.key">
               <div @click="selectCoverStyle(s.key)"
@@ -998,6 +1027,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
     <!-- ── 广告规则 ──────────────────────────────────── -->
     <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page"
+         x-init="$watch('$store.catalog.filePath', v => { if(v && !adScanPath) adScanPath=v })"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
       <div style="margin-bottom:24px;">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
@@ -1408,7 +1438,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
             <div x-show="editorSelected>=0" class="card">
               <div style="display:flex; align-items:center; justify-content:space-between;
                           margin-bottom:10px;">
-                <span class="lbl" style="margin:0;">编辑章节</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="lbl" style="margin:0;">编辑章节</span>
+                  <span x-show="editorChDirty"
+                        style="font-size:10px; color:var(--amber); padding:1px 6px;
+                               border-radius:99px; background:rgba(217,119,6,.12);">未保存</span>
+                </div>
                 <div style="display:flex; gap:6px;">
                   <button class="btn btn-ghost" @click="editorMerge()"
                           :disabled="editorSelected<=0"
@@ -1420,8 +1455,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 </div>
               </div>
               <input class="inp" type="text" x-model="editorChTitle"
+                     @input="editorChDirty=true"
                      placeholder="章节标题" style="margin-bottom:8px; font-weight:500;">
               <textarea class="inp" x-model="editorChContent" rows="14"
+                        @input="editorChDirty=true"
                         style="resize:vertical; font-size:12px; line-height:1.75;
                                font-family:inherit;"></textarea>
               <div style="display:flex; align-items:center; justify-content:space-between;
@@ -1586,12 +1623,32 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <span>日志</span>
     <span style="font-size:9px;" x-text="logVisible?'▲':'▼'"></span>
   </button>
+  <button x-show="logVisible" @click="logFullscreen=!logFullscreen"
+          :title="logFullscreen?'收起':'全屏日志'"
+          style="display:flex; align-items:center; padding:3px 6px; border-radius:5px;
+                 background:none; border:none; cursor:pointer; color:var(--dim);
+                 transition:color .15s; font-family:inherit; font-size:11px; flex-shrink:0;"
+          onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">
+    <span x-text="logFullscreen?'⊠':'⊞'" style="font-size:13px;"></span>
+  </button>
 </div>
 
 <!-- ══ Log panel ═════════════════════════════════════════════ -->
 <div x-show="logVisible" id="log-panel"
-     style="flex-shrink:0; height:160px; background:var(--log-bg);
-            border-top:1px solid rgba(255,255,255,.03); overflow-y:auto;">
+     :style="logFullscreen
+       ? 'position:fixed; inset:0; z-index:300; height:100vh; background:var(--log-bg); overflow-y:auto;'
+       : 'flex-shrink:0; height:160px; background:var(--log-bg); border-top:1px solid rgba(255,255,255,.03); overflow-y:auto;'">
+  <!-- 全屏模式顶栏 -->
+  <div x-show="logFullscreen"
+       style="position:sticky; top:0; z-index:1; display:flex; align-items:center;
+              justify-content:space-between; padding:8px 14px;
+              background:rgba(5,7,9,.95); border-bottom:1px solid rgba(255,255,255,.06);">
+    <span style="font-size:12px; color:var(--muted); font-family:'JetBrains Mono',monospace;">日志输出</span>
+    <button @click="logFullscreen=false"
+            style="background:none; border:none; cursor:pointer; color:var(--dim);
+                   font-size:20px; line-height:1; padding:0 4px; transition:color .15s;"
+            onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">×</button>
+  </div>
   <div style="padding:10px 14px; font-family:'JetBrains Mono',monospace;
               font-size:11px; line-height:1.75;">
     <div x-show="!logs.length"
@@ -1747,6 +1804,7 @@ document.addEventListener('alpine:init', () => {
     path:'', chapters:[], stats:{}, working:false,
     selected:-1, editNum:'', editTitle:'', changes:0, saving:false,
     _dragIdx:-1, _dragOver:-1,
+    filePath:'',   // shared with adfilter panel
   })
 
   // ── 广告规则面板 ─────────────────────────────────────────────
@@ -1759,7 +1817,12 @@ document.addEventListener('alpine:init', () => {
     adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
     adScanSelected:{}, adDeleteWorking:false, adDeleteOutput:'',
 
-    init() { this.loadAdRules() },
+    init() {
+      this.loadAdRules()
+      if (this.$store.catalog.filePath && !this.adScanPath) {
+        this.adScanPath = this.$store.catalog.filePath
+      }
+    },
 
     async loadAdRules() {
       try {
@@ -1912,6 +1975,7 @@ document.addEventListener('alpine:init', () => {
     editorIsbn: '', editorPubdate: '',
     editorChapters: [],
     editorSelected: -1, editorChTitle: '', editorChContent: '', editorChWorking: false,
+    editorChDirty: false,
     editorMetaOpen: false, editorMetaSaving: false,
     editorFindQuery: '', editorFindResults: [], editorFindWorking: false, editorFindDone: false,
     editorReplaceFrom: '', editorReplaceTo: '', editorReplaceWorking: false,
@@ -1945,7 +2009,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     async editorSelectChapter(i) {
-      this.editorSelected = i; this.editorChWorking = true
+      if (this.editorChDirty && this.editorSelected >= 0) {
+        if (!confirm('当前章节有未保存的修改，确认切换？')) return
+      }
+      this.editorSelected = i; this.editorChWorking = true; this.editorChDirty = false
       try {
         const r = await fetch(`/api/editor/chapter/${i}`).then(r=>r.json())
         this.editorChTitle = r.title || ''; this.editorChContent = r.content || ''
@@ -1969,6 +2036,7 @@ document.addEventListener('alpine:init', () => {
           chars:      this.editorChContent.length,
           first_line: this.editorChContent.split('\n')[0].slice(0, 60),
         }
+        this.editorChDirty = false
         this.toast('已保存', `第 ${i+1} 章`)
       } catch(e) { this.toast('保存失败', e.message, false) }
       this.editorChWorking = false
@@ -2189,7 +2257,7 @@ function app() {
       { value:'auto',     label:'自动搜索' },
       { value:'generate', label:'自动生成' },
     ],
-    logs:[], logVisible:true,
+    logs:[], logVisible:true, logFullscreen:false,
     outputPath:'', progress:0, progressErr:false,
     status:'就绪', statusOk:true, working:false,
     recentFiles:[], recentDirs:[],
@@ -2293,6 +2361,7 @@ function app() {
     async onEpubFileChange() {
       if (!this.epubPath) return
       this.epubTitleEdited=false; this.epubAuthorEdited=false; this.epubCatalogOpen=false
+      this.$store.catalog.filePath = this.epubPath
       try {
         const r = await this.post('/api/extract-meta', { path:this.epubPath })
         if (r.title)  this.epubTitle  = r.title
