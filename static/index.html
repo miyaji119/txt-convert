@@ -886,6 +886,16 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
+      <div style="margin-bottom:12px;">
+        <span class="lbl">输出目录（可选）</span>
+        <div class="sublbl" style="margin-bottom:4px;">留空则写到输入文件同目录；填入 Kavita 书库路径可直接同步</div>
+        <div style="display:flex; gap:8px;">
+          <input class="inp" type="text" x-model="epubOutputDir"
+                 placeholder="~/Books/epub-library" style="flex:1;">
+          <button class="btn btn-ghost" @click="browseDir('epub-output-dir')">选择目录</button>
+        </div>
+      </div>
+
       <div style="display:flex; align-items:center; gap:16px; justify-content:flex-end;">
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
@@ -1569,9 +1579,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <div class="card">
           <span class="lbl">重建 EPUB</span>
           <div class="sublbl">输出路径（留空则写入 ~/.txt2epub/output/）</div>
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
             <input class="inp" type="text" x-model="editorBuildOutput"
                    placeholder="~/.txt2epub/output/书名.epub" style="flex:1;">
+          </div>
+          <div class="sublbl" style="margin-bottom:4px;">或指定书库目录（Kavita 等），优先级低于上方完整路径</div>
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input class="inp" type="text" x-model="editorOutputDir"
+                   placeholder="~/Books/epub-library" style="flex:1;">
+            <button class="btn btn-ghost" @click="browseDir('editor-output-dir')">选择目录</button>
           </div>
           <button class="btn btn-amber" style="width:100%; font-size:14px; padding:10px;"
                   @click="editorBuild()" :disabled="editorBuildWorking">
@@ -1979,7 +1995,7 @@ document.addEventListener('alpine:init', () => {
     editorMetaOpen: false, editorMetaSaving: false,
     editorFindQuery: '', editorFindResults: [], editorFindWorking: false, editorFindDone: false,
     editorReplaceFrom: '', editorReplaceTo: '', editorReplaceWorking: false,
-    editorBuildOutput: '', editorBuildWorking: false,
+    editorBuildOutput: '', editorBuildWorking: false, editorOutputDir: '',
 
     async editorBrowse() {
       const r = await this.post('/api/dialog', { mode:'file', title:'选择 EPUB 或 TXT 文件' })
@@ -2112,7 +2128,10 @@ document.addEventListener('alpine:init', () => {
       this.editorBuildWorking = true; this.working = true
       this.progress = 8; this.progressErr = false; this.setStatus('重建 EPUB 中…')
       try {
-        const r = await this.post('/api/editor/build', { output_path: this.editorBuildOutput })
+        const r = await this.post('/api/editor/build', {
+          output_path: this.editorBuildOutput,
+          output_dir: this.editorOutputDir||'',
+        })
         this.outputPath = r.epub_path
         this.progress = 100; this.setStatus('EPUB 重建完成')
         this.toast('EPUB 重建完成', this.basename(r.epub_path||''))
@@ -2243,6 +2262,7 @@ function app() {
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
     epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false,
+    epubOutputDir:'',
     epubCoverStyle:'minimal_light', epubCoverStyles:[],
     epubCoverPreviewUrl:'', epubCoverPreviewLoading:false,
     epubCatalogOpen:false,
@@ -2329,6 +2349,12 @@ function app() {
       if (!r.path) return
       if (target==='epub')    { this.epubPath=r.path;    await this.onEpubFileChange() }
       if (target==='catalog') this.$store.catalog.path=r.path
+    },
+    async browseDir(target) {
+      const r = await this.post('/api/dialog', { mode:'dir', title:'选择目录' })
+      if (!r.path) return
+      if (target==='epub-output-dir')   this.epubOutputDir = r.path
+      if (target==='editor-output-dir') this.editorOutputDir = r.path
     },
     async browseCover() {
       const r = await this.post('/api/dialog', { mode:'file', title:'选择封面图片' })
@@ -2420,6 +2446,7 @@ function app() {
           filter_ads:this.filterAds,
           margin:this.epubMargin, line_height:this.epubLineHeight,
           text_indent:this.epubTextIndent, custom_css:this.epubCustomCss,
+          output_dir: this.epubOutputDir||'',
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
         this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true

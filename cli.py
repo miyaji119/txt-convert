@@ -28,6 +28,7 @@ def main():
     p.add_argument("--no-punct",  action="store_true", help="跳过标点规范化")
     p.add_argument("--txt-only",  action="store_true", help="只输出 epub_ready.txt，不生成 EPUB")
     p.add_argument("--ignore-mismatch", action="store_true", help="忽略跨章节内容不一致错误")
+    p.add_argument("--output-dir",  default=None, help="EPUB 输出目录（不填则输出到输入文件同目录）")
     args = p.parse_args()
 
     if not os.path.isfile(args.input):
@@ -62,8 +63,16 @@ def main():
         print("❌ 缺少 ebooklib，请 pip install ebooklib", file=sys.stderr)
         sys.exit(1)
 
+    output_path = None
+    if args.output_dir:
+        os.makedirs(args.output_dir, exist_ok=True)
+        title = args.title or ""
+        import re as _re
+        safe_title = _re.sub(r'[<>:"/\\|?*]', '_', title) if title else os.path.splitext(os.path.basename(txt_out))[0]
+        output_path = os.path.join(args.output_dir, f"{safe_title}.epub")
+
     epub_path = EPUBGenerator.txt_to_epub(
-        txt_out, None,
+        txt_out, output_path,
         args.title, args.author,
         args.cover, False, None,
     )

@@ -309,6 +309,8 @@ class EpubReq(BaseModel):
     illustrations: list = []
     # 自动生成封面风格（空字符串 = 不生成；"minimal_light" 等见 cover_gen.py）
     generate_cover_style: str = ""
+    # 书库输出目录（留空则写到输入文件同目录），用于 Kavita 等书库直接接收
+    output_dir: str = ""
 
 
 @app.post("/api/epub")
@@ -326,8 +328,13 @@ async def api_epub(req: EpubReq):
             if not out:
                 raise RuntimeError("转换失败")
             cur = out
+        output_path = None
+        if req.output_dir:
+            os.makedirs(req.output_dir, exist_ok=True)
+            safe_title = re.sub(r'[<>:"/\\|?*]', '_', req.title) if req.title else os.path.splitext(os.path.basename(cur))[0]
+            output_path = os.path.join(req.output_dir, f"{safe_title}.epub")
         epub_path = EPUBGenerator.txt_to_epub(
-            cur, None, req.title, req.author,
+            cur, output_path, req.title, req.author,
             req.cover_image or None, req.auto_search_cover, req.cover_url or None,
             req.description, req.publisher,
             req.margin, req.line_height, req.text_indent, req.custom_css,
@@ -1070,6 +1077,8 @@ class EditorBuildReq(BaseModel):
     fonts: dict = {}
     illustrations: list = []
     generate_cover_style: str = ""
+    # 书库输出目录（优先级低于 output_path），用于 Kavita 等书库直接接收
+    output_dir: str = ""
 
 
 @app.post("/api/editor/build")
@@ -1091,6 +1100,10 @@ async def api_editor_build(req: EditorBuildReq):
             tags      = list(_SESSION["tags"])
 
         output_path = req.output_path or None
+        if not output_path and req.output_dir:
+            os.makedirs(req.output_dir, exist_ok=True)
+            safe_title = re.sub(r'[<>:"/\\|?*]', '_', title) if title else 'output'
+            output_path = os.path.join(req.output_dir, f"{safe_title}.epub")
         epub_path = EPUBGenerator.txt_to_epub(
             None, output_path,
             title, author,
