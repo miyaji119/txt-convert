@@ -342,13 +342,22 @@ tr:hover td { background: rgba(255,255,255,.015); }
   <aside style="flex-shrink:0; width:192px; background:var(--panel);
                 border-right:1px solid var(--border); padding:8px 0;">
     <template x-for="item in navItems" :key="item.id">
-      <div class="nav-item" :class="page===item.id?'nav-active':''" @click="page=item.id">
-        <span style="font-size:15px; width:20px; text-align:center; flex-shrink:0;"
-              x-text="item.icon"></span>
-        <span x-text="item.label"></span>
-        <span x-show="item.badge" class="nav-badge"
-              :class="item.badgeOk?'badge-ok':'badge-err'"
-              x-text="item.badge"></span>
+      <div>
+        <div x-show="item.separator"
+             style="margin:10px 0 2px; padding:5px 16px 3px;
+                    font-size:10px; font-weight:600; letter-spacing:.08em;
+                    color:var(--muted); text-transform:uppercase;
+                    border-top:1px solid var(--border);"
+             x-text="item.label"></div>
+        <div x-show="!item.separator"
+             class="nav-item" :class="page===item.id?'nav-active':''" @click="page=item.id">
+          <span style="font-size:15px; width:20px; text-align:center; flex-shrink:0;"
+                x-text="item.icon"></span>
+          <span x-text="item.label"></span>
+          <span x-show="item.badge" class="nav-badge"
+                :class="item.badgeOk?'badge-ok':'badge-err'"
+                x-text="item.badge"></span>
+        </div>
       </div>
     </template>
   </aside>
@@ -2198,12 +2207,12 @@ document.addEventListener('alpine:init', () => {
           filter_ads:this.filterAds,
         })
         this.outputPath=r.output_file; this.progress=100; this.setStatus('转换完成')
-        this.navItems[0].badge='✓'; this.navItems[0].badgeOk=true
+        this.navItems.find(n=>n.id==='convert').badge='✓'; this.navItems.find(n=>n.id==='convert').badgeOk=true
         this.toast('转换完成', this.basename(r.output_file||''))
         await this.loadRecent()
       } catch(e) {
         this.progressErr=true; this.progress=0; this.setStatus('转换失败', false)
-        this.navItems[0].badge='✗'; this.navItems[0].badgeOk=false
+        this.navItems.find(n=>n.id==='convert').badge='✗'; this.navItems.find(n=>n.id==='convert').badgeOk=false
         this.toast('转换失败', e.message, false)
       }
       this.convertWorking=false; this.working=false
@@ -2228,13 +2237,13 @@ document.addEventListener('alpine:init', () => {
         this.batchResults = r.results||[]
         const ok = this.batchResults.filter(x=>!x.error).length
         this.progress=100; this.setStatus(`完成 ${ok}/${this.batchResults.length}`)
-        this.navItems[1].badge=`${ok}✓`; this.navItems[1].badgeOk=ok>0
+        this.navItems.find(n=>n.id==='batch').badge=`${ok}✓`; this.navItems.find(n=>n.id==='batch').badgeOk=ok>0
         if (this.batchResults[0]?.output_file) this.outputPath=this.batchResults[0].output_file
         this.toast(`批量完成 ${ok}/${this.batchResults.length}`, `${ok} 个文件成功`, ok>0)
         await this.loadRecent()
       } catch(e) {
         this.progressErr=true; this.progress=0; this.setStatus('批量失败', false)
-        this.navItems[1].badge='✗'; this.navItems[1].badgeOk=false
+        this.navItems.find(n=>n.id==='batch').badge='✗'; this.navItems.find(n=>n.id==='batch').badgeOk=false
         this.toast('批量失败', e.message, false)
       }
       this.batchWorking=false; this.working=false
@@ -2250,13 +2259,14 @@ function app() {
   return {
     page: 'convert',
     navItems: [
-      { id:'convert',  icon:'📝', label:'单文件转换', badge:'', badgeOk:true },
-      { id:'batch',    icon:'📦', label:'批量转换',   badge:'', badgeOk:true },
-      { id:'epub',     icon:'📕', label:'生成 EPUB',  badge:'', badgeOk:true },
-      { id:'catalog',  icon:'📋', label:'目录查看',   badge:'', badgeOk:true },
-      { id:'adfilter',     icon:'🔧', label:'广告规则',   badge:'', badgeOk:true },
-      { id:'chapterRules', icon:'📖', label:'章节规则',   badge:'', badgeOk:true },
-      { id:'editor',       icon:'✏️',  label:'EPUB 编辑器', badge:'', badgeOk:true },
+      { id:'convert',      icon:'📝', label:'单文件转换',   badge:'', badgeOk:true },
+      { id:'batch',        icon:'📦', label:'批量转换',     badge:'', badgeOk:true },
+      { id:'epub',         icon:'📕', label:'生成 EPUB',    badge:'', badgeOk:true },
+      { id:'editor',       icon:'✏️',  label:'EPUB 编辑器',  badge:'', badgeOk:true },
+      { id:'_tools', separator:true, label:'辅助工具' },
+      { id:'catalog',      icon:'📋', label:'目录编辑',     badge:'', badgeOk:true },
+      { id:'adfilter',     icon:'🔧', label:'广告规则',     badge:'', badgeOk:true },
+      { id:'chapterRules', icon:'📖', label:'章节规则',     badge:'', badgeOk:true },
     ],
     filterAds:true,
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
@@ -2449,11 +2459,11 @@ function app() {
           output_dir: this.epubOutputDir||'',
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
-        this.navItems[2].badge='✓'; this.navItems[2].badgeOk=true
+        this.navItems.find(n=>n.id==='epub').badge='✓'; this.navItems.find(n=>n.id==='epub').badgeOk=true
         this.toast('EPUB 生成完成', this.basename(r.epub_path||''))
       } catch(e) {
         this.progressErr=true; this.progress=0; this.setStatus('生成失败', false)
-        this.navItems[2].badge='✗'; this.navItems[2].badgeOk=false
+        this.navItems.find(n=>n.id==='epub').badge='✗'; this.navItems.find(n=>n.id==='epub').badgeOk=false
         this.toast('EPUB 生成失败', e.message, false)
       }
       this.epubWorking=false; this.working=false
@@ -2490,7 +2500,7 @@ function app() {
           total_chars:    r.total_chars,
         }
         this.setStatus('就绪')
-        this.navItems[3].badge=String(r.total_chapters||0); this.navItems[3].badgeOk=true
+        this.navItems.find(n=>n.id==='catalog').badge=String(r.total_chapters||0); this.navItems.find(n=>n.id==='catalog').badgeOk=true
       } catch(e) { this.setStatus('加载失败', false); this.toast('加载失败', e.message, false) }
       cs.working=false
     },
