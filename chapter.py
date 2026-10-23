@@ -29,6 +29,8 @@ class ChapterAnalyzer:
         'part':              (1, 2, '部分', True),
         'section':           (1, 2, '节', True),
         'custom':            (1, 2, '章', False),
+        'no_di_chapter':     (1, 2, '章', True),
+        'chinese_part':      (1, 2, '部', True),
     }
 
     _AUTHOR_NOTE_PAT = re.compile(
@@ -87,7 +89,7 @@ class ChapterAnalyzer:
             num_grp, title_grp, unit, normalize = cfg
             raw = chapter_match.group(num_grp)
             chapter_num = ChapterAnalyzer.normalize_chapter_num(raw) if normalize else int(raw)
-            title_part = chapter_match.group(title_grp).strip() if title_grp else ""
+            title_part = (chapter_match.group(title_grp) or "").strip() if title_grp else ""
             # 标题以句号结尾，或以叹号/问号结尾且较长 → 疑似正文混入标题行
             if title_part and (
                 title_part[-1] == '。'
@@ -130,6 +132,14 @@ class ChapterAnalyzer:
             sub = chapter_match.group(2).strip() if chapter_match.lastindex >= 2 else ''
             num = _SPECIAL_NUMS.get(name, 9990)
             return num, f"{name} {sub}" if sub else name
+
+        if ptype == 'chapter_part':
+            num = ChapterAnalyzer.normalize_chapter_num(chapter_match.group(1))
+            title = chapter_match.group(2).strip()
+            suffix = chapter_match.group(3).strip()
+            unit_str = f"第{num}章"
+            title_full = f"{title}（{suffix}）" if title else f"（{suffix}）"
+            return num, f"{unit_str} {title_full}"
 
         return None, ""
 
@@ -186,17 +196,24 @@ class ChapterAnalyzer:
                 break
 
         # ── 第二遍：过滤掉落在「作者有话要说」区域内的候选 ─────────────────────
-        real_candidates = []
-        last_any_idx = -1  # 已处理（含跳过）的最后一个候选行索引
-        for (i, chapter_num, chapter_title) in candidates:
-            look_from = last_any_idx + 1 if last_any_idx >= 0 else 0
-            in_note = any(ChapterAnalyzer._AUTHOR_NOTE_PAT.match(lines[k].strip())
-                          for k in range(look_from, i)
-                          if lines[k].strip())
-            last_any_idx = i  # 无论真假都前进，防止同一个作者标记重复触发
-            if in_note:
-                continue
-            real_candidates.append((i, chapter_num, chapter_title))
+        # 注释区域定义：注释起始行（exclusive）到下一个候选章节行（exclusive）之间。
+        # 候选章节行本身不在区域内——它是注释区域的终点，不应被过滤。
+        candidate_positions = sorted(c[0] for c in candidates)
+        note_starts = [
+            k for k, line in enumerate(lines)
+            if ChapterAnalyzer._AUTHOR_NOTE_PAT.match(line.strip())
+        ]
+        note_regions = []
+        for ns in note_starts:
+            pos = bisect.bisect_right(candidate_positions, ns)
+            end = candidate_positions[pos] if pos < len(candidate_positions) else len(lines)
+            note_regions.append((ns, end))
+
+        def _in_note_region(idx: int) -> bool:
+            return any(start < idx < end for start, end in note_regions)
+
+        real_candidates = [(i, cn, ct) for (i, cn, ct) in candidates
+                           if not _in_note_region(i)]
 
         # ── 第三遍：去重并计算每章的 end_line ────────────────────────────────
         real_starts = [c[0] for c in real_candidates]  # 用于 bisect 的有效章节起始行
