@@ -14,10 +14,15 @@ import json
 import queue
 import signal
 import asyncio
+import warnings
 import threading
 import webbrowser
 import subprocess
 from pathlib import Path
+
+# Python 3.14 弃用了 asyncio.iscoroutinefunction，starlette 内部仍在使用，屏蔽该警告
+warnings.filterwarnings("ignore", message="'asyncio.iscoroutinefunction' is deprecated",
+                        category=DeprecationWarning)
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List
 
@@ -301,12 +306,17 @@ class EpubReq(BaseModel):
     volume_map: dict = {}
     # 样式预设（空列表 = 使用服务端默认）
     style_presets: list = []
-    # 头图配置列表：[{"path": "/path/img.jpg", "edge": "fade"}]
+    # 头图配置列表：[{"path": "/path/img.jpg", "edge": "fade", "assign": "1-20,25"}]
+    # assign 留空则按轮换；可用区间 "1-20" 或列表 "1,3,5-10" 指定固定章节
     header_images: list = []
     # 字体路径：{"body": "/path/body.ttf", "title": ..., "dlg": ..., "toc": ...}
     fonts: dict = {}
     # 插图页：[{"path": "/path/img.jpg", "after_chapter": 0, "caption": ""}]
     illustrations: list = []
+    # 章节标题样式：'classic'|'plain'|'double'|'ink'|'seal'|'card'（见 /api/epub/chapter-title-styles）
+    chapter_title_style: str = "classic"
+    # 章节标题对齐：'left'|'center'|'right'
+    chapter_title_align: str = "center"
     # 自动生成封面风格（空字符串 = 不生成；"minimal_light" 等见 cover_gen.py）
     generate_cover_style: str = ""
     # 输出目录（留空则写到输入文件同目录）
@@ -346,6 +356,8 @@ async def api_epub(req: EpubReq):
             req.header_images or None,
             req.fonts or None,
             req.illustrations or None,
+            chapter_title_style=req.chapter_title_style or "classic",
+            chapter_title_align=req.chapter_title_align or "center",
             generate_cover_style=req.generate_cover_style or "",
         )
         return epub_path
@@ -1076,6 +1088,7 @@ class EditorBuildReq(BaseModel):
     header_images: list = []
     fonts: dict = {}
     illustrations: list = []
+    chapter_title_style: str = "classic"
     generate_cover_style: str = ""
     # 输出目录（优先级低于 output_path）
     output_dir: str = ""
@@ -1118,6 +1131,8 @@ async def api_editor_build(req: EditorBuildReq):
             req.header_images or None,
             req.fonts or None,
             req.illustrations or None,
+            chapter_title_style=req.chapter_title_style or "classic",
+            chapter_title_align=req.chapter_title_align or "center",
             generate_cover_style=req.generate_cover_style or "",
             chapters=chapters,
         )
@@ -1213,6 +1228,15 @@ async def cover_styles():
     return {"styles": list_styles()}
 
 
+@app.get("/api/epub/chapter-title-styles")
+async def chapter_title_styles():
+    from epub import EPUBGenerator
+    return [
+        {"key": k, "name": v["name"], "desc": v.get("desc", "")}
+        for k, v in EPUBGenerator.CHAPTER_TITLE_STYLES.items()
+    ]
+
+
 class PreviewCoverReq(BaseModel):
     title: str
     author: str = ""
@@ -1233,6 +1257,8 @@ async def preview_cover(req: PreviewCoverReq):
 
 @app.get("/api/cover-proxy")
 async def cover_proxy(url: str, referer: str = ""):
+    if not url or not url.startswith("http"):
+        raise HTTPException(400, "无效的图片 URL")
     from cover import _http_get
     loop = asyncio.get_running_loop()
     raw, _ = await loop.run_in_executor(executor, lambda: _http_get(url, referer=referer, timeout=15))

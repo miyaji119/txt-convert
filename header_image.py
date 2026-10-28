@@ -11,7 +11,7 @@ import math
 from typing import Optional
 
 try:
-    from PIL import Image, ImageDraw, ImageFilter
+    from PIL import Image, ImageDraw, ImageFilter, ImageChops
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -124,6 +124,187 @@ def _mask_oval(w: int, h: int, seed: int = 0) -> "Image.Image":
     pad_x, pad_y = int(w * 0.05), int(h * 0.08)
     draw.ellipse([(pad_x, pad_y), (w - pad_x, h - pad_y)], fill=255)
     return mask.filter(ImageFilter.GaussianBlur(radius=12))
+
+
+def _rot_ellipse(w: int, h: int, cx: float, cy: float,
+                 rw: float, rh: float, angle: float) -> "Image.Image":
+    """生成旋转椭圆透明层（被 brush/watercolor/brushframe 使用）。"""
+    layer = Image.new("L", (w, h), 0)
+    e = Image.new("L", (int(rw * 2) + 4, int(rh * 2) + 4), 0)
+    ImageDraw.Draw(e).ellipse([2, 2, int(rw * 2) + 2, int(rh * 2) + 2], fill=255)
+    e = e.rotate(angle, expand=True, resample=Image.BICUBIC)
+    layer.paste(e, (int(cx - e.width / 2), int(cy - e.height / 2)), e)
+    return layer
+
+
+@_register("splash", "泼溅边")
+def _mask_splash(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    md.rectangle([60, 50, w - 60, h - 50], fill=255)
+    for _ in range(260):
+        side = rnd.choice("tblr")
+        if side == "t":   cx, cy = rnd.randint(0, w), int(50 + rnd.gauss(0, 28))
+        elif side == "b": cx, cy = rnd.randint(0, w), int(h - 50 + rnd.gauss(0, 28))
+        elif side == "l": cx, cy = int(60 + rnd.gauss(0, 28)), rnd.randint(0, h)
+        else:             cx, cy = int(w - 60 + rnd.gauss(0, 28)), rnd.randint(0, h)
+        r = max(2, int(rnd.gauss(8, 6)))
+        md.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    return mask.filter(ImageFilter.GaussianBlur(3))
+
+
+@_register("brush", "拖墨边")
+def _mask_brush(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    md.rectangle([0, 0, w, h - 55], fill=255)
+    for i in range(5):
+        cx = w * 0.35 + i * w * 0.14 + rnd.randint(-15, 15)
+        layer = _rot_ellipse(w, h, cx, h - 40 + rnd.randint(-12, 12),
+                             rnd.randint(140, 260), rnd.randint(10, 22),
+                             -6 + rnd.randint(-3, 3))
+        mask = ImageChops.lighter(mask, layer)
+    return mask.filter(ImageFilter.GaussianBlur(8))
+
+
+@_register("watercolor", "晕染边")
+def _mask_watercolor(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    for _ in range(6):
+        cx = w / 2 + rnd.randint(-int(w * 0.12), int(w * 0.12))
+        cy = h / 2 + rnd.randint(-int(h * 0.14), int(h * 0.14))
+        rw = rnd.randint(int(w * 0.30), int(w * 0.46))
+        rh = rnd.randint(int(h * 0.28), int(h * 0.44))
+        layer = _rot_ellipse(w, h, cx, cy, rw, rh, rnd.randint(-25, 25))
+        mask = ImageChops.lighter(mask, layer)
+    return mask.filter(ImageFilter.GaussianBlur(18))
+
+
+@_register("tornframe", "撕框边")
+def _mask_tornframe(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    inx, iny = int(w * 0.05), int(h * 0.08)
+    md.rectangle([inx, iny, w - inx, h - iny], fill=255)
+    dmax = int(min(w, h) * 0.045)
+    for _ in range(130):
+        side = rnd.choice("tblr")
+        t = rnd.uniform(0.03, 0.97)
+        depth = int(rnd.uniform(dmax * 0.3, dmax))
+        half = max(3, int(dmax * rnd.uniform(0.6, 1.6)))
+        outward = rnd.random() < 0.5
+        if side == "t":
+            cx, y = int(w * t), iny + rnd.randint(-8, 8)
+            peak = y - depth if outward else y + depth
+            md.polygon([(cx - half, y), (cx + half, y), (cx, peak)], fill=255 if outward else 0)
+        elif side == "b":
+            cx, y = int(w * t), h - iny + rnd.randint(-8, 8)
+            peak = y + depth if outward else y - depth
+            md.polygon([(cx - half, y), (cx + half, y), (cx, peak)], fill=255 if outward else 0)
+        elif side == "l":
+            cy, x = int(h * t), inx + rnd.randint(-8, 8)
+            peak = x - depth if outward else x + depth
+            md.polygon([(x, cy - half), (x, cy + half), (peak, cy)], fill=255 if outward else 0)
+        else:
+            cy, x = int(h * t), w - inx + rnd.randint(-8, 8)
+            peak = x + depth if outward else x - depth
+            md.polygon([(x, cy - half), (x, cy + half), (peak, cy)], fill=255 if outward else 0)
+    for _ in range(150):
+        side = rnd.choice("tblr")
+        t = rnd.uniform(0, 1)
+        ln = rnd.randint(3, 10)
+        if side == "t":
+            x, y = int(w * t), iny + rnd.randint(-4, 4)
+            md.line([(x, y), (x + rnd.randint(-4, 4), y - ln)], fill=255, width=1)
+        elif side == "b":
+            x, y = int(w * t), h - iny + rnd.randint(-4, 4)
+            md.line([(x, y), (x + rnd.randint(-4, 4), y + ln)], fill=255, width=1)
+        elif side == "l":
+            x, y = inx + rnd.randint(-4, 4), int(h * t)
+            md.line([(x, y), (x - ln, y + rnd.randint(-4, 4))], fill=255, width=1)
+        else:
+            x, y = w - inx + rnd.randint(-4, 4), int(h * t)
+            md.line([(x, y), (x + ln, y + rnd.randint(-4, 4))], fill=255, width=1)
+    return mask.filter(ImageFilter.GaussianBlur(3))
+
+
+@_register("deckle", "毛边")
+def _mask_deckle(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    cut = int(h * 0.035)
+    md.rectangle([0, 0, w, h - cut], fill=255)
+    x = 0
+    while x < w:
+        ln = rnd.randint(2, cut + int(h * 0.012))
+        md.line([(x, h - cut), (x + rnd.randint(-2, 2), h - cut + ln)], fill=255,
+                width=rnd.randint(1, 3))
+        x += rnd.randint(2, 6)
+    for _ in range(60):
+        x = rnd.randint(0, w)
+        up = rnd.randint(2, cut)
+        md.polygon([(x - rnd.randint(2, 6), h - cut), (x + rnd.randint(2, 6), h - cut),
+                    (x, h - cut + up)], fill=0)
+    x = 0
+    while x < w:
+        if rnd.random() < 0.5:
+            ln = rnd.randint(2, int(cut * 0.8))
+            md.line([(x, h - cut - rnd.randint(0, 4)), (x, h - cut + ln)], fill=255, width=1)
+        x += rnd.randint(3, 8)
+    return mask.filter(ImageFilter.GaussianBlur(1))
+
+
+@_register("brushframe", "笔刷框")
+def _mask_brushframe(w: int, h: int, seed: int = 0) -> "Image.Image":
+    rnd = random.Random(seed)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    x0, y0, x1, y1 = int(w * 0.045), int(h * 0.10), int(w * 0.955), int(h * 0.90)
+    md.rounded_rectangle([x0, y0, x1, y1], radius=int(min(w, h) * 0.05), fill=255)
+    for _ in range(140):
+        side = rnd.choice("tblr")
+        t = rnd.uniform(0.02, 0.98)
+        th = max(2, int(min(w, h) * rnd.uniform(0.004, 0.014)))
+        ln = min(w, h) * rnd.uniform(0.04, 0.16)
+        bleed = int(min(w, h) * rnd.uniform(0.005, 0.028))
+        if side == "t":
+            cx, cy = w * t, y0 + rnd.randint(-5, 5) - bleed
+            layer = _rot_ellipse(w, h, cx, cy, ln / 2, th, rnd.uniform(-4, 4))
+        elif side == "b":
+            cx, cy = w * t, y1 + rnd.randint(-5, 5) + bleed
+            layer = _rot_ellipse(w, h, cx, cy, ln / 2, th, rnd.uniform(-4, 4))
+        elif side == "l":
+            cx, cy = x0 + rnd.randint(-5, 5) - bleed, h * t
+            layer = _rot_ellipse(w, h, cx, cy, th, ln / 2, rnd.uniform(-4, 4))
+        else:
+            cx, cy = x1 + rnd.randint(-5, 5) + bleed, h * t
+            layer = _rot_ellipse(w, h, cx, cy, th, ln / 2, rnd.uniform(-4, 4))
+        mask = ImageChops.lighter(mask, layer)
+    for _ in range(30):
+        side = rnd.choice("tblr")
+        t = rnd.uniform(0.05, 0.95)
+        if side == "t":
+            cy = y0 + rnd.randint(2, 10)
+            md.line([(w * t - rnd.randint(20, 60), cy), (w * t + rnd.randint(20, 60), cy)],
+                    fill=0, width=rnd.randint(1, 3))
+        elif side == "b":
+            cy = y1 - rnd.randint(2, 10)
+            md.line([(w * t - rnd.randint(20, 60), cy), (w * t + rnd.randint(20, 60), cy)],
+                    fill=0, width=rnd.randint(1, 3))
+        elif side == "l":
+            cx = x0 + rnd.randint(2, 10)
+            md.line([(cx, h * t - rnd.randint(15, 45)), (cx, h * t + rnd.randint(15, 45))],
+                    fill=0, width=rnd.randint(1, 2))
+        else:
+            cx = x1 - rnd.randint(2, 10)
+            md.line([(cx, h * t - rnd.randint(15, 45)), (cx, h * t + rnd.randint(15, 45))],
+                    fill=0, width=rnd.randint(1, 2))
+    return mask.filter(ImageFilter.GaussianBlur(1.5))
 
 
 # ── 公开 API ───────────────────────────────────────────────────

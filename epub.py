@@ -27,7 +27,10 @@ class EPUBGenerator:
     ]
 
     _AUTHOR_NOTE_RE = re.compile(
-        r'^[\s=*]*(作者有话要?说?|作者说|作话|作者留言|作者碎碎念|碎碎念|作者叨叨)[\s:：。=*]{0,10}$'
+        r'^[\s=*]*(?:📢\s*)?[【]?'
+        r'(作者有话要?说?|作者说|作话|作者留言|作者碎碎念|碎碎念|作者叨叨'
+        r'|作家有话说|作家想说的话|作者想说的话|作者的话)'
+        r'[】]?[\s:：。=*]{0,10}$'
     )
 
     _SCENE_BREAK_PAT = re.compile(r'^[\*＊·•\s]+$')
@@ -229,6 +232,66 @@ class EPUBGenerator:
         r'^(第[零一二三四五六七八九十百千万两\d]+卷|卷[零一二三四五六七八九十百千万两\d]|[上中下]卷)'
     )
 
+    # 章节标题样式预设：key → {name, h1_css}
+    # h1_css 会追加到样式表末尾，覆盖 _CSS_TEMPLATE 中的默认 h1 规则
+    # 全部使用黑白灰，兼容水墨屏（e-ink）
+    CHAPTER_TITLE_STYLES: dict = {
+        'classic': {
+            'name': '细线',
+            'desc': '单条细底线，简洁通用',
+            'h1_css': (
+                'font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
+                'margin:2em 0 1.8em;padding-bottom:.65em;'
+                'border-bottom:1px solid #999999;letter-spacing:.12em'
+            ),
+        },
+        'plain': {
+            'name': '极简',
+            'desc': '无线条，宽字距留白',
+            'h1_css': (
+                'font-size:1.3em;font-weight:bold;text-align:center;line-height:1.5;'
+                'margin:2.5em 0 2.2em;letter-spacing:.28em'
+            ),
+        },
+        'double': {
+            'name': '上下线',
+            'desc': '等粗上下细线，匀称',
+            'h1_css': (
+                'font-size:1.25em;font-weight:bold;text-align:center;line-height:1.6;'
+                'margin:1.8em 0 1.6em;padding:.52em 0;'
+                'border-top:1px solid #888888;border-bottom:1px solid #888888;letter-spacing:.15em'
+            ),
+        },
+        'ink': {
+            'name': '古风',
+            'desc': '上粗下细，有层次感',
+            'h1_css': (
+                'font-size:1.25em;font-weight:bold;text-align:center;line-height:1.6;'
+                'margin:1.8em 0 1.6em;padding:.52em 0;'
+                'border-top:2px solid #111111;border-bottom:1px solid #bbbbbb;letter-spacing:.15em'
+            ),
+        },
+        'seal': {
+            'name': '粗线',
+            'desc': '加粗底线，视觉重心下沉',
+            'h1_css': (
+                'font-size:1.2em;font-weight:bold;text-align:center;line-height:1.6;'
+                'margin:2em 0 1.8em;padding-bottom:.55em;'
+                'border-bottom:2.5px solid #222222;letter-spacing:.18em'
+            ),
+        },
+        'card': {
+            'name': '浅底',
+            'desc': '浅灰背景块，上下细线',
+            'h1_css': (
+                'font-size:1.2em;font-weight:bold;text-align:center;line-height:1.6;'
+                'margin:2em 0 1.8em;padding:.52em 1em;'
+                'background:#efefef;border-top:1px solid #cccccc;border-bottom:1px solid #cccccc;'
+                'letter-spacing:.12em'
+            ),
+        },
+    }
+
     _CSS_TEMPLATE = (
         '@charset "UTF-8";'
         'body{{font-family:"Noto Serif CJK SC","Source Han Serif SC","思源宋体","STSong","SimSun","宋体",serif;'
@@ -276,10 +339,17 @@ class EPUBGenerator:
     def _build_css(cls, margin: str = "0 4%", line_height: float = 1.8,
                    text_indent: str = "2em", custom_css: str = "",
                    dialog_styles: dict = None,
-                   style_presets: list = None) -> str:
+                   style_presets: list = None,
+                   chapter_title_style: str = "",
+                   chapter_title_align: str = "") -> str:
         css = cls._CSS_TEMPLATE.format(
             margin=margin, line_height=line_height, text_indent=text_indent
         )
+        if chapter_title_style and chapter_title_style in cls.CHAPTER_TITLE_STYLES:
+            h1_css = cls.CHAPTER_TITLE_STYLES[chapter_title_style]['h1_css']
+            css += f'h1{{{h1_css}}}'
+        if chapter_title_align in ('left', 'right', 'center'):
+            css += f'h1{{text-align:{chapter_title_align}}}'
         # 从 style_presets 生成 span/block CSS（优先于旧 dialog_styles）
         presets = style_presets if style_presets is not None else cls.DEFAULT_STYLE_PRESETS
         seen_keys: set = set()
@@ -750,6 +820,8 @@ class EPUBGenerator:
                     fonts: dict = None,
                     illustrations: list = None,
                     chapters: list = None,
+                    chapter_title_style: str = "",
+                    chapter_title_align: str = "",
                     generate_cover_style: str = "") -> Optional[str]:
         """将TXT文件（或预解析章节列表）转换为EPUB。
 
@@ -978,10 +1050,27 @@ class EPUBGenerator:
             )
             # 预处理头图
             _headers: list = []
+            _header_fixed: dict = {}  # 0-based chapter_index → h_cfg
             if header_images:
                 try:
                     from header_image import make_header
                     _headers = header_images if isinstance(header_images, list) else [header_images]
+                    for h_cfg in _headers:
+                        assign_str = h_cfg.get('assign', '') if isinstance(h_cfg, dict) else ''
+                        if not assign_str:
+                            continue
+                        for cs in re.split(r'[,，、;；\s]+', str(assign_str)):
+                            cs = cs.strip()
+                            m = re.fullmatch(r'(\d+)[-~～—–－到](\d+)', cs)
+                            if m:
+                                lo, hi = int(m.group(1)), int(m.group(2))
+                                for cn in range(min(lo, hi), max(lo, hi) + 1):
+                                    if cn >= 1:
+                                        _header_fixed[cn - 1] = h_cfg
+                            elif cs.isdigit():
+                                cn = int(cs)
+                                if cn >= 1:
+                                    _header_fixed[cn - 1] = h_cfg
                 except ImportError:
                     print("   ⚠️ header_image 模块不可用，跳过头图")
             spine = ['nav']
@@ -996,6 +1085,8 @@ class EPUBGenerator:
                     text_indent=text_indent, custom_css=custom_css,
                     dialog_styles=dialog_styles,
                     style_presets=style_presets,
+                    chapter_title_style=chapter_title_style,
+                    chapter_title_align=chapter_title_align,
                 ).encode('utf-8'),
             )
             book.add_item(css_item)
@@ -1060,19 +1151,20 @@ class EPUBGenerator:
                             '\n</div>'
                         )
                 epub_chapter = epub.EpubHtml(title=chapter_title, file_name=f'chapter_{i+1:03d}.xhtml', lang='zh')
-                # 头图（仅正文章节，按轮换索引选取）
+                # 头图（仅正文章节，按固定指定或轮换索引选取）
                 header_html = ''
                 if _headers and '_html' not in chapter:
-                    h_cfg = _headers[i % len(_headers)]
+                    h_cfg = _header_fixed.get(i) or _headers[i % len(_headers)]
+                    h_idx = _headers.index(h_cfg) if h_cfg in _headers else i % len(_headers)
                     h_path = h_cfg.get('path', h_cfg) if isinstance(h_cfg, dict) else h_cfg
                     h_edge = h_cfg.get('edge', 'fade') if isinstance(h_cfg, dict) else 'fade'
-                    h_name = f'header_{i % len(_headers)}.jpg'
+                    h_name = f'header_{h_idx}.jpg'
                     if os.path.isfile(str(h_path)):
                         from header_image import make_header as _make_header
                         h_bytes = _make_header(str(h_path), h_edge)
                         if h_bytes:
                             h_item = epub.EpubItem(
-                                uid=f'hdr-{i % len(_headers)}',
+                                uid=f'hdr-{h_idx}',
                                 file_name=f'images/{h_name}',
                                 media_type='image/jpeg', content=h_bytes,
                             )

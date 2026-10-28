@@ -794,6 +794,39 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </div>
           </div>
           <div>
+            <span class="sublbl">章节标题样式</span>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:6px;">
+              <template x-for="s in epubTitleStyles" :key="s.key">
+                <div @click="epubTitleStyle=s.key"
+                     :style="`border-radius:7px; padding:8px 6px 6px; cursor:pointer;
+                              border:2px solid ${epubTitleStyle===s.key?'#d97706':'var(--border)'};
+                              background:${epubTitleStyle===s.key?'rgba(217,119,6,.06)':'var(--surface)'};
+                              transition:border-color .15s; user-select:none; text-align:center;`">
+                  <!-- 标题样式小样 -->
+                  <div style="background:#fff; border-radius:4px; padding:6px 8px; margin-bottom:5px;
+                               font-family:'Noto Serif SC',serif; font-size:11px; color:#1c1c1c;">
+                    <div :style="s.preview_style">第一章</div>
+                  </div>
+                  <span style="font-size:10px; color:var(--muted);" x-text="s.name"></span>
+                </div>
+              </template>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <span style="font-size:11px; color:var(--muted); flex-shrink:0;">标题对齐：</span>
+              <template x-for="a in [{v:'left',l:'左对齐'},{v:'center',l:'居中'},{v:'right',l:'右对齐'}]" :key="a.v">
+                <label style="cursor:pointer; user-select:none;">
+                  <input type="radio" :value="a.v" x-model="epubTitleAlign" style="display:none;">
+                  <span :style="epubTitleAlign===a.v
+                                 ? 'background:rgba(217,119,6,.15);color:var(--amber);border-color:rgba(217,119,6,.5);'
+                                 : 'background:transparent;color:var(--muted);border-color:var(--border);'"
+                        style="display:inline-block; font-size:11px; padding:2px 10px;
+                               border-radius:99px; border:1px solid; transition:all .15s;"
+                        x-text="a.l"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+          <div>
             <span class="sublbl">自定义 CSS（追加到末尾）</span>
             <textarea class="inp" x-model="epubCustomCss" rows="4"
                       placeholder="span.dlg-cn { color: #4a6fa5; }&#10;span.dlg-sq { font-style: italic; }"
@@ -806,6 +839,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
               <div style="background:#ffffff; color:#1a1a1a;
                           font-family:'Noto Serif SC',serif; font-size:15px;"
                    :style="`padding: 16px ${epubMargin.split(' ').pop()};`">
+                <div :style="(epubTitleStyles.find(s=>s.key===epubTitleStyle)?.preview_style||'font-weight:bold;text-align:center;padding-bottom:5px;border-bottom:1px solid #999;letter-spacing:.12em;font-size:12px;') + 'text-align:' + epubTitleAlign + ';'"
+                     style="margin-bottom:1.2em;">
+                  第一章 序章
+                </div>
                 <p :style="`line-height:${epubLineHeight}; text-indent:${epubTextIndent}; margin-bottom:${epubLineHeight * 0.4}em;`">
                   这是正文段落示例。秋风吹过，叶落知秋，岁月匆匆，转眼又是一年光景。她回过头，窗外的银杏叶正一片片落下，像是时光的印记。
                 </p>
@@ -2161,6 +2198,8 @@ function app() {
     epubCatalogOpen:false,
     epubStyleOpen:false,
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
+    epubTitleStyle:'classic', epubTitleStyles:[],
+    epubTitleAlign:'center',
     coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
     epubCoverUrlConfirmed:'', epubCoverConfirmedTitle:'', epubCoverConfirmedSource:'',
     epubCoverSource: 'jjwxc',
@@ -2183,6 +2222,7 @@ function app() {
       document.body.setAttribute('data-theme', this.theme)
       this.loadRecent(); this.startLogs()
       this.loadCoverStyles()
+      this.loadTitleStyles()
     },
 
     toggleTheme() {
@@ -2261,6 +2301,22 @@ function app() {
         const r = await fetch('/api/epub/cover-styles').then(r=>r.json())
         this.epubCoverStyles = r.styles || []
       } catch(_) {}
+    },
+    loadTitleStyles() {
+      this.epubTitleStyles = [
+        { key:'classic',  name:'细线',
+          preview_style:'font-weight:bold;text-align:center;padding-bottom:5px;border-bottom:1px solid #999;letter-spacing:.12em;font-size:12px;color:#1a1a1a;' },
+        { key:'plain',    name:'极简',
+          preview_style:'font-weight:bold;text-align:center;letter-spacing:.28em;font-size:12px;color:#1a1a1a;margin:2px 0;' },
+        { key:'double',   name:'上下线',
+          preview_style:'font-weight:bold;text-align:center;padding:4px 0;border-top:1px solid #888;border-bottom:1px solid #888;letter-spacing:.15em;font-size:12px;color:#1a1a1a;' },
+        { key:'ink',      name:'古风',
+          preview_style:'font-weight:bold;text-align:center;padding:4px 0;border-top:2px solid #111;border-bottom:1px solid #bbb;letter-spacing:.15em;font-size:12px;color:#1a1a1a;' },
+        { key:'seal',     name:'粗线',
+          preview_style:'font-weight:bold;text-align:center;padding-bottom:4px;border-bottom:2.5px solid #222;letter-spacing:.18em;font-size:12px;color:#1a1a1a;' },
+        { key:'card',     name:'浅底',
+          preview_style:'font-weight:bold;text-align:center;padding:4px 8px;background:#efefef;border-top:1px solid #ccc;border-bottom:1px solid #ccc;letter-spacing:.12em;font-size:12px;color:#1a1a1a;' },
+      ]
     },
     async selectCoverStyle(key) {
       this.epubCoverStyle = key
@@ -2362,6 +2418,8 @@ function app() {
           filter_ads:this.filterAds,
           margin:this.epubMargin, line_height:this.epubLineHeight,
           text_indent:this.epubTextIndent, custom_css:this.epubCustomCss,
+          chapter_title_style: this.epubTitleStyle||'classic',
+          chapter_title_align: this.epubTitleAlign||'center',
           output_dir: this.epubOutputDir||'',
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
