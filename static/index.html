@@ -320,7 +320,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 box-shadow:0 2px 12px rgba(217,119,6,.3);">📚</div>
     <span style="font-weight:600; color:var(--text); letter-spacing:-.01em;">TXT → EPUB</span>
     <span style="font-size:10px; padding:2px 7px; border-radius:5px;
-                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.13</span>
+                 background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.14</span>
   </div>
   <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
     <button @click="toggleTheme()"
@@ -364,123 +364,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
   <!-- Main -->
   <main style="flex:1; overflow-y:auto; background:var(--ink);">
-
-    <!-- ── 单文件转换 ────────────────────────────────── -->
-    <div x-show="page==='convert'" x-data="convertPanel()" class="page"
-         style="max-width:620px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">单文件转换</h1>
-        <p style="color:var(--muted);">将 TXT 转为 EPUB-ready 格式，标准化章节标题、合并段落</p>
-      </div>
-
-      <div class="card" style="margin-bottom:12px;">
-        <span class="lbl">文件路径</span>
-        <div style="display:flex; gap:8px;">
-          <input class="inp" type="text" x-model="convertPath"
-                 placeholder="/Users/…/novel.txt" @change="onConvertFileChange()">
-          <button class="btn btn-ghost" @click="convertBrowse()">浏览</button>
-          <button x-show="convertPath" class="btn btn-ghost" @click="openFile(convertPath)">打开</button>
-        </div>
-        <div x-show="recentFiles.length"
-             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <span style="font-size:11px; color:var(--dim);">最近:</span>
-          <template x-for="f in recentFiles.slice(0,5)" :key="f">
-            <button @click="convertPath=f; onConvertFileChange()"
-                    style="font-size:11px; color:#d97706; background:none; border:none;
-                           cursor:pointer; padding:0; max-width:160px; overflow:hidden;
-                           text-overflow:ellipsis; white-space:nowrap;
-                           transition:color .15s; font-family:inherit;"
-                    onmouseover="this.style.color='#f59e0b'"
-                    onmouseout="this.style.color='#d97706'"
-                    x-text="basename(f)"></button>
-          </template>
-        </div>
-      </div>
-
-      <div class="card" style="margin-bottom:12px;">
-        <span class="lbl">书籍信息</span>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div>
-            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
-              <div class="sublbl" style="margin:0;">书名</div>
-              <span x-show="convertMeta.title && !convertTitleEdited"
-                    style="font-size:10px; padding:1px 6px; border-radius:99px;
-                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
-            </div>
-            <input class="inp" type="text" x-model="convertTitle"
-                   placeholder="留空自动识别" @input="convertTitleEdited=true">
-          </div>
-          <div>
-            <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
-              <div class="sublbl" style="margin:0;">作者</div>
-              <span x-show="convertMeta.author && !convertAuthorEdited"
-                    style="font-size:10px; padding:1px 6px; border-radius:99px;
-                           background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
-            </div>
-            <input class="inp" type="text" x-model="convertAuthor"
-                   placeholder="留空自动识别" @input="convertAuthorEdited=true">
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
-        <label style="display:flex; align-items:center; gap:8px;
-                      cursor:pointer; user-select:none; color:var(--muted);">
-          <input type="checkbox" x-model="convertShowCatalog"
-                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
-          转换后显示章节目录
-        </label>
-        <label style="display:flex; align-items:center; gap:8px;
-                      cursor:pointer; user-select:none; color:var(--muted);">
-          <input type="checkbox" x-model="filterAds"
-                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
-          过滤广告行
-        </label>
-        <button class="btn btn-amber" style="margin-left:auto;"
-                @click="doConvert()" :disabled="convertWorking||!convertPath">
-          <span x-show="convertWorking" class="spin"></span>
-          <span x-text="convertWorking?'转换中…':'▶  开始转换'"></span>
-        </button>
-      </div>
-
-      <!-- 转换完成快捷跳转 -->
-      <div x-show="outputPath && !convertWorking"
-           style="margin-bottom:12px; padding:10px 14px; border-radius:9px;
-                  background:rgba(52,211,153,.06); border:1px solid rgba(52,211,153,.18);
-                  display:flex; align-items:center; gap:10px;">
-        <span style="font-size:11px; color:#34d399; flex:1; overflow:hidden;
-                     text-overflow:ellipsis; white-space:nowrap;"
-              x-text="'✓ ' + (basename(outputPath)||'转换完成')"></span>
-        <button class="btn btn-amber" style="padding:5px 14px; font-size:12px; flex-shrink:0;"
-                @click="page='epub'; $nextTick(()=>{ $dispatch('set-epub-path', outputPath) })">
-          → 生成 EPUB
-        </button>
-      </div>
-
-      <div x-show="convertMeta.name" class="card">
-        <span class="lbl">文件信息</span>
-        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; text-align:center;">
-          <div>
-            <div style="font-size:12px; font-weight:600; color:#d97706;
-                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                 x-text="convertMeta.name"></div>
-            <div class="sublbl" style="margin-top:3px; text-align:center;">文件名</div>
-          </div>
-          <div>
-            <div style="font-size:22px; font-weight:700; color:#d97706; font-variant-numeric:tabular-nums;"
-                 x-text="convertMeta.size?formatSize(convertMeta.size):'—'"></div>
-            <div class="sublbl" style="margin-top:3px; text-align:center;">大小</div>
-          </div>
-          <div>
-            <div style="font-size:12px; font-weight:600; color:#34d399;
-                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                 x-text="convertMeta.title||'未识别'"></div>
-            <div class="sublbl" style="margin-top:3px; text-align:center;">识别书名</div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ── 批量转换 ──────────────────────────────────── -->
     <div x-show="page==='batch'" x-data="batchPanel()" class="page"
@@ -571,29 +454,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
     <!-- ── 生成 EPUB ──────────────────────────────────── -->
     <div x-show="page==='epub'" class="page"
-         style="max-width:620px; margin:0 auto; padding:32px 24px;"
-         @set-epub-path.window="epubPath=$event.detail; onEpubFileChange()">
+         style="max-width:620px; margin:0 auto; padding:32px 24px;">
       <div style="margin-bottom:24px;">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">生成 EPUB</h1>
-        <p style="color:var(--muted);">原始 TXT 自动先转换再生成；含 _epub_ready 的文件直接生成</p>
-      </div>
-
-      <div class="info-box" style="margin-bottom:14px;">
-        <span style="color:#d97706; flex-shrink:0; margin-top:1px;">💡</span>
-        <p style="font-size:12px; color:rgba(217,119,6,.7); line-height:1.6;">
-          建议先在「单文件」或「批量」完成转换，再到此处生成 EPUB。
-          文件名含 <code style="color:#d97706; background:rgba(217,119,6,.1); padding:0 4px;
-          border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:11px;">_epub_ready</code>
-          的文件视为已转换，直接生成。
-        </p>
+                   color:var(--text); margin-bottom:4px;">TXT → EPUB</h1>
+        <p style="color:var(--muted);">清洗 TXT、编辑章节、配置封面，一键生成精排 EPUB</p>
       </div>
 
       <div class="card" style="margin-bottom:12px;">
         <span class="lbl">TXT 文件</span>
         <div style="display:flex; gap:8px;">
           <input class="inp" type="text" x-model="epubPath"
-                 placeholder="/Users/…/novel_epub_ready.txt"
+                 placeholder="/Users/…/novel.txt"
                  @change="onEpubFileChange()">
           <button class="btn btn-ghost" @click="browseFile('epub')">浏览</button>
         </div>
@@ -601,7 +473,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
              style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
           <span style="font-size:11px; color:var(--dim);">最近:</span>
           <template x-for="f in recentFiles.slice(0,5)" :key="f">
-            <button @click="epubPath=f"
+            <button @click="epubPath=f; onEpubFileChange()"
                     style="font-size:11px; color:#d97706; background:none; border:none;
                            cursor:pointer; padding:0; max-width:180px; overflow:hidden;
                            text-overflow:ellipsis; white-space:nowrap;
@@ -905,13 +777,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
-      <div style="display:flex; align-items:center; gap:16px; justify-content:flex-end;">
+      <div style="display:flex; align-items:center; gap:10px; justify-content:flex-end;">
         <label style="display:flex; align-items:center; gap:8px;
                       cursor:pointer; user-select:none; color:var(--muted);">
           <input type="checkbox" x-model="filterAds"
                  style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
           过滤广告行
         </label>
+        <button class="btn btn-ghost" @click="doTxtOnly()"
+                :disabled="epubTxtOnlyWorking||epubWorking||!epubPath">
+          <span x-show="epubTxtOnlyWorking" class="spin"></span>
+          <span x-text="epubTxtOnlyWorking?'转换中…':'🔧  仅清洗 TXT'"></span>
+        </button>
         <button class="btn btn-amber" @click="doEpub()"
                 :disabled="epubWorking||coverSearching||!epubPath">
           <span x-show="epubWorking||coverSearching" class="spin"></span>
@@ -2175,50 +2052,6 @@ document.addEventListener('alpine:init', () => {
     },
   }))
 
-  // ── 单文件转换面板 ────────────────────────────────────────────
-  Alpine.data('convertPanel', () => ({
-    convertPath:'', convertTitle:'', convertAuthor:'',
-    convertShowCatalog:true, convertWorking:false, convertMeta:{},
-    convertTitleEdited:false, convertAuthorEdited:false,
-
-    async onConvertFileChange() {
-      if (!this.convertPath) return
-      this.convertTitleEdited=false; this.convertAuthorEdited=false
-      try {
-        const r = await this.post('/api/extract-meta', { path:this.convertPath })
-        if (r.title)  this.convertTitle  = r.title
-        if (r.author) this.convertAuthor = r.author
-        this.convertMeta = r
-      } catch(_) { this.convertMeta = {} }
-    },
-
-    async convertBrowse() {
-      const r = await this.post('/api/dialog', { mode:'file', title:'选择 TXT 文件' })
-      if (r.path) { this.convertPath = r.path; await this.onConvertFileChange() }
-    },
-
-    async doConvert() {
-      if (!this.convertPath||this.convertWorking) return
-      this.convertWorking=true; this.working=true
-      this.progress=8; this.progressErr=false; this.setStatus('转换中…')
-      try {
-        const r = await this.post('/api/convert', {
-          path:this.convertPath, title:this.convertTitle, author:this.convertAuthor,
-          filter_ads:this.filterAds,
-        })
-        this.outputPath=r.output_file; this.progress=100; this.setStatus('转换完成')
-        this.navItems.find(n=>n.id==='convert').badge='✓'; this.navItems.find(n=>n.id==='convert').badgeOk=true
-        this.toast('转换完成', this.basename(r.output_file||''))
-        await this.loadRecent()
-      } catch(e) {
-        this.progressErr=true; this.progress=0; this.setStatus('转换失败', false)
-        this.navItems.find(n=>n.id==='convert').badge='✗'; this.navItems.find(n=>n.id==='convert').badgeOk=false
-        this.toast('转换失败', e.message, false)
-      }
-      this.convertWorking=false; this.working=false
-    },
-  }))
-
   // ── 批量转换面板 ──────────────────────────────────────────────
   Alpine.data('batchPanel', () => ({
     batchDir:'', batchWorking:false, batchResults:[],
@@ -2257,21 +2090,20 @@ document.addEventListener('alpine:init', () => {
 <script>
 function app() {
   return {
-    page: 'convert',
+    page: 'epub',
     navItems: [
-      { id:'convert',      icon:'📝', label:'单文件转换',   badge:'', badgeOk:true },
+      { id:'epub',         icon:'📕', label:'TXT → EPUB',   badge:'', badgeOk:true },
       { id:'batch',        icon:'📦', label:'批量转换',     badge:'', badgeOk:true },
-      { id:'epub',         icon:'📕', label:'生成 EPUB',    badge:'', badgeOk:true },
       { id:'editor',       icon:'✏️',  label:'EPUB 编辑器',  badge:'', badgeOk:true },
       { id:'_tools', separator:true, label:'辅助工具' },
       { id:'catalog',      icon:'📋', label:'目录编辑',     badge:'', badgeOk:true },
-      { id:'adfilter',     icon:'🔧', label:'广告规则',     badge:'', badgeOk:true },
-      { id:'chapterRules', icon:'📖', label:'章节规则',     badge:'', badgeOk:true },
+      { id:'adfilter',     icon:'🔧', label:'广告扫描',     badge:'', badgeOk:true },
+      { id:'chapterRules', icon:'📖', label:'章节识别',     badge:'', badgeOk:true },
     ],
     filterAds:true,
     epubPath:'', epubTitle:'', epubAuthor:'', epubMeta:{},
     epubTitleEdited:false, epubAuthorEdited:false,
-    epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false,
+    epubCoverChoice:'none', epubCoverPath:'', epubCoverUrl:'', epubWorking:false, epubTxtOnlyWorking:false,
     epubOutputDir:'',
     epubCoverStyle:'minimal_light', epubCoverStyles:[],
     epubCoverPreviewUrl:'', epubCoverPreviewLoading:false,
@@ -2467,6 +2299,28 @@ function app() {
         this.toast('EPUB 生成失败', e.message, false)
       }
       this.epubWorking=false; this.working=false
+    },
+
+    async doTxtOnly() {
+      if (!this.epubPath || this.epubTxtOnlyWorking || this.epubWorking) return
+      this.epubTxtOnlyWorking=true; this.working=true
+      this.progress=8; this.progressErr=false; this.setStatus('清洗 TXT 中…')
+      try {
+        const r = await this.post('/api/convert', {
+          path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
+          filter_ads:this.filterAds,
+        })
+        this.epubPath = r.output_file
+        this.outputPath = r.output_file
+        this.progress=100; this.setStatus('转换完成')
+        this.toast('TXT 清洗完成', this.basename(r.output_file||''))
+        await this.onEpubFileChange()
+        await this.loadRecent()
+      } catch(e) {
+        this.progressErr=true; this.progress=0; this.setStatus('转换失败', false)
+        this.toast('转换失败', e.message, false)
+      }
+      this.epubTxtOnlyWorking=false; this.working=false
     },
 
     confirmCover() {
