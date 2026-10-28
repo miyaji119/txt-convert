@@ -657,7 +657,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <!-- 来源选择 -->
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
             <span style="font-size:11px; color:var(--muted); flex-shrink:0;">来源优先：</span>
-            <template x-for="src in [{id:'jjwxc',label:'晋江文学城'},{id:'gongzicp',label:'长佩文学'}]" :key="src.id">
+            <template x-for="src in [{id:'jjwxc',label:'晋江文学城'},{id:'gongzicp',label:'长佩文学'},{id:'qidian',label:'起点中文网'},{id:'weread',label:'微信读书'}]" :key="src.id">
               <label style="cursor:pointer; user-select:none;">
                 <input type="radio" :value="src.id" x-model="epubCoverSource" style="display:none;">
                 <span :style="epubCoverSource===src.id

@@ -5,6 +5,7 @@
 - 长佩文学（gongzicp.com）：搜索页 HTML 解析
 - 豆瓣读书（book.douban.com）：subject_suggest JSON 接口
 - 微信读书（weread.qq.com）：/web/search/global 接口，无需登录
+- 起点中文网（qidian.com）：搜索页 HTML 解析
 - Bing 图片（兜底）
 
 设计要点：
@@ -689,6 +690,103 @@ def _search_via_weread(book_title: str, author: str = '') -> List[CoverCandidate
 
 
 # ======================================================================
+# 搜索源 5：起点中文网
+# ======================================================================
+def _search_via_qidian(book_title: str, author: str = '') -> List[CoverCandidate]:
+    """起点中文网搜索：解析搜索结果页 HTML
+
+    搜索页: https://www.qidian.com/search?kw={kw}
+    封面格式: //bookcover.qidian.com/qdbimg/349573/{bookid}/{size}.jpg
+    """
+    candidates: List[CoverCandidate] = []
+    kw = book_title.strip()
+    if not kw:
+        return candidates
+
+    print(f"   [起点] 搜索: {kw}")
+    url = "https://www.qidian.com/search?kw=" + urllib.parse.quote(kw)
+    raw, _ = _http_get(url, referer="https://www.qidian.com/", timeout=12)
+    if not raw:
+        print("   [起点] 搜索请求失败")
+        return candidates
+
+    html = raw.decode("utf-8", errors="ignore")
+
+    # 封面 URL：//bookcover.qidian.com/qdbimg/{prefix}/{bookid}/{size}.jpg
+    cover_re = re.compile(
+        r'//bookcover\.qidian\.com/qdbimg/\d+/(\d+)/(\d+)\.jpg', re.I)
+
+    # 书名：href="/book/{id}/" alt="{title}" 或 class="title" 内
+    block_re = re.compile(
+        r'href=["\'](?:https?:)?//(?:www\.)?qidian\.com/book/(\d+)/["\'][^>]*>'
+        r'\s*(?:<img[^>]+alt=["\']([^"\']*)["\'][^>]*>)?',
+        re.I | re.S,
+    )
+    title_re = re.compile(r'class=["\'][^"\']*title[^"\']*["\'][^>]*>\s*([^<]{1,60})<', re.I)
+    author_re = re.compile(
+        r'class=["\'][^"\']*(?:author|name)[^"\']*["\'][^>]*>\s*([^<]{1,40})<', re.I)
+
+    # 提取封面 URL + book ID
+    seen_ids: set = set()
+    book_ids: List[tuple] = []  # [(book_id, cover_url)]
+    for m in cover_re.finditer(html):
+        bid = m.group(1)
+        if bid in seen_ids:
+            continue
+        seen_ids.add(bid)
+        cover_url = f"https://bookcover.qidian.com/qdbimg/349573/{bid}/300.jpg"
+        book_ids.append((bid, cover_url))
+        if len(book_ids) >= 6:
+            break
+
+    if not book_ids:
+        print("   [起点] 未找到封面图")
+        return candidates
+
+    # 提取书名（从 block href alt 或 class=title 文本）
+    titles_from_alt: List[str] = []
+    for bm in block_re.finditer(html):
+        alt = (bm.group(2) or "").strip()
+        titles_from_alt.append(alt)
+
+    titles_from_class = [m.group(1).strip() for m in title_re.finditer(html)]
+    authors_list = [m.group(1).strip() for m in author_re.finditer(html)]
+
+    for idx, (bid, cover_url) in enumerate(book_ids):
+        title = ""
+        if idx < len(titles_from_alt) and titles_from_alt[idx]:
+            title = titles_from_alt[idx]
+        elif idx < len(titles_from_class):
+            title = titles_from_class[idx]
+        item_author = authors_list[idx] if idx < len(authors_list) else ""
+
+        confidence = 0.0
+        if title:
+            if title == kw:
+                confidence = 1.0
+            elif kw in title or title in kw:
+                confidence = 0.8
+            else:
+                confidence = 0.4
+        if author.strip() and item_author and author.strip() in item_author:
+            confidence = min(1.0, confidence + 0.1)
+
+        candidates.append(CoverCandidate(
+            image_url=cover_url,
+            source="qidian",
+            source_name="起点中文网",
+            referer="https://www.qidian.com/",
+            book_id=bid,
+            book_title=title,
+            author=item_author,
+            confidence=confidence,
+        ))
+
+    print(f"   [起点] 解析出 {len(candidates)} 个封面候选")
+    return candidates
+
+
+# ======================================================================
 # 主搜索接口
 # ======================================================================
 def search_cover_candidates(book_title: str,
@@ -716,6 +814,7 @@ def search_cover_candidates(book_title: str,
         ('豆瓣读书',   'douban',   lambda: _search_via_douban(book_title, author)),
         ('微信读书',   'weread',   lambda: _search_via_weread(book_title, author)),
         ('长佩文学',   'gongzicp', lambda: _search_via_gongzicp(book_title, author)),
+        ('起点中文网', 'qidian',   lambda: _search_via_qidian(book_title, author)),
         ('Bing 图片',  'bing',     lambda: _search_via_bing(book_title, author)),
     ]
 
