@@ -1181,6 +1181,7 @@ async def open_file_req(req: PathReq):
 class SearchCoverReq(BaseModel):
     title: str
     author: str = ""
+    preferred_source: str = ""  # 'jjwxc' | 'gongzicp' | ''
 
 
 @app.post("/api/epub/search-covers")
@@ -1189,7 +1190,7 @@ async def search_covers(req: SearchCoverReq):
         raise HTTPException(400, "书名不能为空")
     loop = asyncio.get_running_loop()
     candidates = await loop.run_in_executor(
-        executor, lambda: search_cover_candidates(req.title, req.author)
+        executor, lambda: search_cover_candidates(req.title, req.author, req.preferred_source)
     )
     return {
         "candidates": [

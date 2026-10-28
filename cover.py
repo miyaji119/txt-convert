@@ -692,30 +692,39 @@ def _search_via_weread(book_title: str, author: str = '') -> List[CoverCandidate
 # 主搜索接口
 # ======================================================================
 def search_cover_candidates(book_title: str,
-                             author: str = '') -> List[CoverCandidate]:
+                             author: str = '',
+                             preferred_source: str = '') -> List[CoverCandidate]:
     """搜索封面，返回所有候选（按置信度降序）
 
     依次调用晋江、豆瓣、微信读书、长佩、Bing 五个源，合并去重。
     单源失败不影响其他源。
+
+    preferred_source: 'jjwxc' 或 'gongzicp'，将该源提到最前；空字符串保持默认顺序。
     """
     if not book_title or not book_title.strip():
         print("⚠️ 未提供书名，无法搜索封面")
         return []
 
-    print(f"🔍 正在搜索封面: {book_title}{' by ' + author if author else ''}")
+    print(f"🔍 正在搜索封面: {book_title}{' by ' + author if author else ''}"
+          f"{' [优先' + preferred_source + ']' if preferred_source else ''}")
 
     all_candidates: List[CoverCandidate] = []
 
     # 按优先级顺序调用各搜索源
     sources = [
-        ('晋江文学城', lambda: _search_via_jjwxc(book_title, author)),
-        ('豆瓣读书', lambda: _search_via_douban(book_title, author)),
-        ('微信读书', lambda: _search_via_weread(book_title, author)),
-        ('长佩文学', lambda: _search_via_gongzicp(book_title, author)),
-        ('Bing 图片', lambda: _search_via_bing(book_title, author)),
+        ('晋江文学城', 'jjwxc',    lambda: _search_via_jjwxc(book_title, author)),
+        ('豆瓣读书',   'douban',   lambda: _search_via_douban(book_title, author)),
+        ('微信读书',   'weread',   lambda: _search_via_weread(book_title, author)),
+        ('长佩文学',   'gongzicp', lambda: _search_via_gongzicp(book_title, author)),
+        ('Bing 图片',  'bing',     lambda: _search_via_bing(book_title, author)),
     ]
 
-    for source_name, search_fn in sources:
+    if preferred_source:
+        idx = next((i for i, s in enumerate(sources) if s[1] == preferred_source), None)
+        if idx is not None:
+            sources = [sources[idx]] + sources[:idx] + sources[idx + 1:]
+
+    for source_name, _sid, search_fn in sources:
         try:
             cs = search_fn()
             all_candidates.extend(cs)

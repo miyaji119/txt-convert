@@ -654,6 +654,21 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
         <!-- 自动搜索封面 -->
         <div x-show="epubCoverChoice==='auto'" style="margin-top:10px;">
+          <!-- 来源选择 -->
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <span style="font-size:11px; color:var(--muted); flex-shrink:0;">来源优先：</span>
+            <template x-for="src in [{id:'jjwxc',label:'晋江文学城'},{id:'gongzicp',label:'长佩文学'}]" :key="src.id">
+              <label style="cursor:pointer; user-select:none;">
+                <input type="radio" :value="src.id" x-model="epubCoverSource" style="display:none;">
+                <span :style="epubCoverSource===src.id
+                               ? 'background:rgba(217,119,6,.15);color:var(--amber);border-color:rgba(217,119,6,.5);'
+                               : 'background:transparent;color:var(--muted);border-color:var(--border);'"
+                      style="display:inline-block; font-size:11px; padding:2px 10px;
+                             border-radius:99px; border:1px solid; transition:all .15s;"
+                      x-text="src.label"></span>
+              </label>
+            </template>
+          </div>
           <!-- 尚未确认封面 -->
           <div x-show="!epubCoverUrlConfirmed"
                style="display:flex; align-items:center; gap:10px;">
@@ -2148,6 +2163,7 @@ function app() {
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
     coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
     epubCoverUrlConfirmed:'', epubCoverConfirmedTitle:'', epubCoverConfirmedSource:'',
+    epubCoverSource: 'jjwxc',
     _epubResolve:null,
     coverOptions:[
       { value:'none',  label:'无封面' },
@@ -2315,7 +2331,8 @@ function app() {
       this.setStatus('搜索封面中…')
       try {
         const r = await this.post('/api/epub/search-covers',
-                                  { title, author: this.epubAuthor || '' })
+                                  { title, author: this.epubAuthor || '',
+                                    preferred_source: this.epubCoverSource || '' })
         this.coverCandidates = r.candidates || []
       } catch(e) {
         this.coverCandidates = []
