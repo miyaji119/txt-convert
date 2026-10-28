@@ -19,10 +19,15 @@ class AdFilter:
         re.I,
     )
 
+    # 明确盗版站名：无需后缀即命中（false positive 风险极低）
+    _PIRACY_RE = re.compile(
+        r'(笔趣阁|新笔趣阁|笔力阅读|阅笔小说|润文网|书趣网|顶点小说|飞卢小说'
+        r'|爱好中文|biliyd|yoabc)',
+        re.I,
+    )
+    # 平台名 + 关键后缀（避免误匹配正文中的地名/公司名）
     _PLATFORM_RE = re.compile(
-        r'(笔趣阁|起点|晋江|纵横|17k|腾讯|阅文|番茄|米读|七猫|掌阅|多看|po18|jjwxc'
-        r'|笔力阅读|阅笔小说|润文网|书趣网|新笔趣阁|顶点小说|飞卢小说|爱好中文'
-        r'|biliyd|yoabc)'
+        r'(起点|晋江|纵横|17k|腾讯|阅文|番茄|米读|七猫|掌阅|多看|po18|jjwxc)'
         r'.{0,6}(小说|阅读|文学|网|app)',
         re.I,
     )
@@ -41,7 +46,7 @@ class AdFilter:
     _HARD_KW = [
         '下载app', '下载APP', 'APP下载', 'app下载',
         '手机用户请', '最新章节请访问', '最新章节请到', '最新更新地址',
-        'txt全集', '电子书下载', '本书来自', '本作品来自', '首发于',
+        'txt全集', '电子书下载', '本书来自', '本作品来自', '首发于', '本书首发',
         '扫码', '二维码', 'qq群', 'QQ群', '公众号', '关注微信', '微信扫',
         '阅读网', '小说网', '全文阅读', '免费全文', '书城',
         '关注.*获取', '加入书架',
@@ -92,6 +97,8 @@ class AdFilter:
 
         if cls._URL_RE.search(s):
             score = max(score, 0.88)
+        if cls._PIRACY_RE.search(s):
+            score = max(score, 0.85)
         if cls._PLATFORM_RE.search(s):
             score = max(score, 0.82)
 
