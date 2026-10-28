@@ -23,7 +23,6 @@ from pathlib import Path
 # Python 3.14 弃用了 asyncio.iscoroutinefunction，starlette 内部仍在使用，屏蔽该警告
 warnings.filterwarnings("ignore", message="'asyncio.iscoroutinefunction' is deprecated",
                         category=DeprecationWarning)
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +32,7 @@ try:
     from fastapi import FastAPI, HTTPException
     from fastapi.responses import StreamingResponse, FileResponse, Response
     from fastapi.staticfiles import StaticFiles
-    from pydantic import BaseModel
+    from pydantic import BaseModel, ConfigDict
 except ImportError:
     print("❌ 缺少依赖，请运行: pip install fastapi 'uvicorn[standard]'")
     sys.exit(1)
@@ -83,7 +82,6 @@ sys.stdout = _Tee(sys.__stdout__)
 
 # ── FastAPI ───────────────────────────────────────────────────
 app = FastAPI(title="TXT→EPUB")
-executor = ThreadPoolExecutor(max_workers=3)
 
 # ── 浏览器关闭自动退出 ────────────────────────────────────────
 _sse_connections = 0
@@ -128,8 +126,7 @@ async def log_stream():
         finally:
             _sse_connections -= 1
             if _sse_connections == 0:
-                loop = asyncio.get_running_loop()
-                _shutdown_task = loop.create_task(_shutdown_if_idle())
+                _shutdown_task = asyncio.create_task(_shutdown_if_idle())
 
     return StreamingResponse(
         gen(),
@@ -140,6 +137,7 @@ async def log_stream():
 
 # ── 文件对话框（macOS osascript）──────────────────────────────
 class DialogReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     mode: str = "file"  # "file" | "dir"
     title: str = "选择"
 
@@ -166,11 +164,10 @@ def _pick_dir(title: str) -> str:
 
 @app.post("/api/dialog")
 async def open_dialog(req: DialogReq):
-    loop = asyncio.get_running_loop()
     if req.mode == "dir":
-        path = await loop.run_in_executor(executor, lambda: _pick_dir(req.title))
+        path = await asyncio.to_thread(_pick_dir, req.title)
     else:
-        path = await loop.run_in_executor(executor, lambda: _pick_file(req.title))
+        path = await asyncio.to_thread(_pick_file, req.title)
     return {"path": path}
 
 
@@ -182,6 +179,7 @@ def get_recent():
 
 # ── 提取元数据 ─────────────────────────────────────────────────
 class PathReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
 
 
@@ -206,7 +204,6 @@ def _clean_filename_title(stem: str) -> str:
 async def extract_meta(req: PathReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -223,11 +220,12 @@ async def extract_meta(req: PathReq):
             "name": os.path.basename(req.path),
         }
 
-    return await loop.run_in_executor(executor, _run)
+    return await asyncio.to_thread(_run)
 
 
 # ── 单文件转换 ─────────────────────────────────────────────────
 class ConvertReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     title: str = ""
     author: str = ""
@@ -239,14 +237,13 @@ async def api_convert(req: ConvertReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
     config.add_recent_file(req.path)
-    loop = asyncio.get_running_loop()
 
     def _run():
         return convert_for_easypub(req.path, None, req.title, req.author, show_catalog=True,
                                    filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
 
     try:
-        out, analysis = await loop.run_in_executor(executor, _run)
+        out, analysis = await asyncio.to_thread(_run)
     except ContentMismatchError as e:
         raise HTTPException(422, str(e))
     except Exception as e:
@@ -258,6 +255,7 @@ async def api_convert(req: ConvertReq):
 
 # ── 批量转换 ───────────────────────────────────────────────────
 class BatchReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     dir_path: str
     filter_ads: bool = True
 
@@ -267,14 +265,13 @@ async def api_batch(req: BatchReq):
     if not os.path.isdir(req.dir_path):
         raise HTTPException(404, "目录不存在")
     config.add_recent_dir(req.dir_path)
-    loop = asyncio.get_running_loop()
 
     def _run():
         return batch_convert_for_easypub(req.dir_path, None, None, show_summary=True,
                                          filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
 
     try:
-        results = await loop.run_in_executor(executor, _run)
+        results = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"results": results or []}
@@ -282,6 +279,7 @@ async def api_batch(req: BatchReq):
 
 # ── 生成 EPUB ──────────────────────────────────────────────────
 class EpubReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     title: str = ""
     author: str = ""
@@ -328,7 +326,6 @@ async def api_epub(req: EpubReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
     config.add_recent_file(req.path)
-    loop = asyncio.get_running_loop()
 
     def _run():
         cur = req.path
@@ -363,7 +360,7 @@ async def api_epub(req: EpubReq):
         return epub_path
 
     try:
-        epub_path = await loop.run_in_executor(executor, _run)
+        epub_path = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     _save_profile(req.dict())
@@ -438,13 +435,12 @@ async def save_style_presets(req: StylePresetsReq):
 async def api_catalog(req: PathReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
         return ChapterAnalyzer.analyze_chapter_structure(content)
 
-    return await loop.run_in_executor(executor, _run)
+    return await asyncio.to_thread(_run)
 
 
 # ── 章节保存 ───────────────────────────────────────────────
@@ -460,7 +456,6 @@ async def api_catalog_save(req: SaveCatalogReq):
         raise HTTPException(404, "文件不存在")
     if not req.chapters:
         raise HTTPException(400, "章节列表为空")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -496,7 +491,7 @@ async def api_catalog_save(req: SaveCatalogReq):
         return out
 
     try:
-        out = await loop.run_in_executor(executor, _run)
+        out = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     config.add_recent_file(out)
@@ -505,6 +500,7 @@ async def api_catalog_save(req: SaveCatalogReq):
 
 # ── 章节标题规范化（数字 → 第X章）────────────────────────────────
 class NormalizeChaptersReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     output_path: str = ""   # 留空则写到 {stem}_normalized.txt
     dry_run: bool = False   # True 时只返回变更列表，不写文件
@@ -514,7 +510,6 @@ class NormalizeChaptersReq(BaseModel):
 async def api_chapters_normalize(req: NormalizeChaptersReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -527,7 +522,7 @@ async def api_chapters_normalize(req: NormalizeChaptersReq):
         return {"output_path": out, "changes": changes}
 
     try:
-        result = await loop.run_in_executor(executor, _run)
+        result = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     if result["output_path"]:
@@ -542,7 +537,6 @@ async def api_find(path: str, q: str, case_sensitive: bool = False):
         raise HTTPException(404, "文件不存在")
     if not q:
         raise HTTPException(400, "查找内容不能为空")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(path)
@@ -554,10 +548,11 @@ async def api_find(path: str, q: str, case_sensitive: bool = False):
                 results.append({'line_num': i + 1, 'text': line.strip()})
         return {'count': len(results), 'results': results}
 
-    return await loop.run_in_executor(executor, _run)
+    return await asyncio.to_thread(_run)
 
 
 class ReplaceReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     find: str
     replace: str = ""
@@ -571,7 +566,6 @@ async def api_replace(req: ReplaceReq):
         raise HTTPException(404, "文件不存在")
     if not req.find:
         raise HTTPException(400, "查找内容不能为空")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -587,7 +581,7 @@ async def api_replace(req: ReplaceReq):
         return {'count': count, 'output_path': out}
 
     try:
-        result = await loop.run_in_executor(executor, _run)
+        result = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     if result['output_path']:
@@ -597,6 +591,7 @@ async def api_replace(req: ReplaceReq):
 
 # ── 重新分章 ───────────────────────────────────────────────────
 class ResplitReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     config_name: str = "default"       # 预设配置名
     extra_patterns: List[str] = []     # 额外自定义正则（优先于配置中的模式）
@@ -608,7 +603,6 @@ class ResplitReq(BaseModel):
 async def api_resplit(req: ResplitReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -625,7 +619,7 @@ async def api_resplit(req: ResplitReq):
         return {"output_path": out, "structure": structure}
 
     try:
-        result = await loop.run_in_executor(executor, _run)
+        result = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     if result["output_path"]:
@@ -694,6 +688,7 @@ async def save_adfilter_rules(req: AdFilterRulesReq):
 
 
 class AdScanReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
 
 
@@ -701,7 +696,6 @@ class AdScanReq(BaseModel):
 async def api_adfilter_scan(req: AdScanReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -713,10 +707,11 @@ async def api_adfilter_scan(req: AdScanReq):
             soft_kw=rules.get('soft_kw'),
         )
 
-    return {'suspicious': await loop.run_in_executor(executor, _run)}
+    return {'suspicious': await asyncio.to_thread(_run)}
 
 
 class AdDeleteReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
     line_nums: List[int]          # 1-indexed，来自 scan 接口返回的 line_num 字段
     output_path: str = ""         # 留空则写到 {stem}_adcleaned.txt
@@ -728,7 +723,6 @@ async def api_adfilter_delete(req: AdDeleteReq):
         raise HTTPException(404, "文件不存在")
     if not req.line_nums:
         raise HTTPException(400, "line_nums 不能为空")
-    loop = asyncio.get_running_loop()
 
     def _run():
         content, enc = EncodingDetector.read_file_with_auto_encoding(req.path)
@@ -743,7 +737,7 @@ async def api_adfilter_delete(req: AdDeleteReq):
         return {"output_path": out, "removed": len(remove_set)}
 
     try:
-        result = await loop.run_in_executor(executor, _run)
+        result = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     return result
@@ -838,6 +832,7 @@ def _session_snapshot() -> dict:
 
 # ── 加载文件到编辑器会话 ───────────────────────────────────────
 class EditorLoadReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     path: str
 
 
@@ -845,7 +840,6 @@ class EditorLoadReq(BaseModel):
 async def api_editor_load(req: EditorLoadReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    loop = asyncio.get_running_loop()
 
     def _run():
         ext = os.path.splitext(req.path)[1].lower()
@@ -885,7 +879,7 @@ async def api_editor_load(req: EditorLoadReq):
         return _session_snapshot()
 
     try:
-        snap = await loop.run_in_executor(executor, _run)
+        snap = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     return snap
@@ -1046,7 +1040,6 @@ class EditorReplaceReq(BaseModel):
 async def api_editor_replace(req: EditorReplaceReq):
     if not req.find:
         raise HTTPException(400, "查找内容不能为空")
-    loop = asyncio.get_running_loop()
 
     def _run():
         flags = 0 if req.case_sensitive else re.IGNORECASE
@@ -1064,7 +1057,7 @@ async def api_editor_replace(req: EditorReplaceReq):
         return total
 
     try:
-        replaced = await loop.run_in_executor(executor, _run)
+        replaced = await asyncio.to_thread(_run)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -1074,6 +1067,7 @@ async def api_editor_replace(req: EditorReplaceReq):
 
 # ── 从会话构建 EPUB ────────────────────────────────────────────
 class EditorBuildReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     output_path: str = ""
     cover_image: str = ""
     cover_url: str = ""
@@ -1096,7 +1090,6 @@ class EditorBuildReq(BaseModel):
 
 @app.post("/api/editor/build")
 async def api_editor_build(req: EditorBuildReq):
-    loop = asyncio.get_running_loop()
 
     def _run():
         with _SESSION_LOCK:
@@ -1141,7 +1134,7 @@ async def api_editor_build(req: EditorBuildReq):
         return epub_path
 
     try:
-        epub_path = await loop.run_in_executor(executor, _run)
+        epub_path = await asyncio.to_thread(_run)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -1194,6 +1187,7 @@ async def open_file_req(req: PathReq):
 
 # ── 封面搜索 ───────────────────────────────────────────────────
 class SearchCoverReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     title: str
     author: str = ""
     preferred_source: str = ""  # 'jjwxc' | 'gongzicp' | ''
@@ -1203,9 +1197,8 @@ class SearchCoverReq(BaseModel):
 async def search_covers(req: SearchCoverReq):
     if not req.title.strip():
         raise HTTPException(400, "书名不能为空")
-    loop = asyncio.get_running_loop()
-    candidates = await loop.run_in_executor(
-        executor, lambda: search_cover_candidates(req.title, req.author, req.preferred_source)
+    candidates = await asyncio.to_thread(
+        search_cover_candidates, req.title, req.author, req.preferred_source
     )
     return {
         "candidates": [
@@ -1238,6 +1231,7 @@ async def chapter_title_styles():
 
 
 class PreviewCoverReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     title: str
     author: str = ""
     style: str = "minimal_light"
@@ -1247,10 +1241,8 @@ class PreviewCoverReq(BaseModel):
 async def preview_cover(req: PreviewCoverReq):
     import base64
     from cover_gen import generate_cover as _gen
-    loop = asyncio.get_running_loop()
-    img_bytes = await loop.run_in_executor(
-        executor,
-        lambda: _gen(req.title or "书名", req.author, req.style, thumb=True),
+    img_bytes = await asyncio.to_thread(
+        lambda: _gen(req.title or "书名", req.author, req.style, thumb=True)
     )
     return {"data_url": "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()}
 
@@ -1260,8 +1252,7 @@ async def cover_proxy(url: str, referer: str = ""):
     if not url or not url.startswith("http"):
         raise HTTPException(400, "无效的图片 URL")
     from cover import _http_get
-    loop = asyncio.get_running_loop()
-    raw, _ = await loop.run_in_executor(executor, lambda: _http_get(url, referer=referer, timeout=15))
+    raw, _ = await asyncio.to_thread(_http_get, url, referer=referer, timeout=15)
     if not raw:
         raise HTTPException(404, "图片获取失败")
     ct = "image/png" if raw[:4] == b'\x89PNG' else "image/jpeg"

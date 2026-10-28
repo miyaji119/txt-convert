@@ -302,6 +302,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
   box-shadow: 0 0 0 2px rgba(217,119,6,.3);
   background: rgba(217,119,6,.05);
 }
+
+/* ── Spacing / layout utilities ─────────────────────── */
+.m0   { margin: 0; }
+.mb3  { margin-bottom: 12px; }
+.mb6  { margin-bottom: 24px; }
+.f1   { flex: 1; }
+.f1-mn { flex: 1; min-width: 120px; }
+.row8 { display: flex; gap: 8px; }
+.c-muted { color: var(--muted); }
 </style>
 <script>tailwind.config = { darkMode: 'class' }</script>
 </head>
@@ -368,15 +377,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <!-- ── 批量转换 ──────────────────────────────────── -->
     <div x-show="page==='batch'" x-data="batchPanel()" class="page"
          style="max-width:620px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">批量转换</h1>
-        <p style="color:var(--muted);">批量转换文件夹内的所有 TXT 文件</p>
+        <p class="c-muted">批量转换文件夹内的所有 TXT 文件</p>
       </div>
 
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">文件夹路径</span>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="batchDir" placeholder="/Users/…/novels/">
           <button class="btn btn-ghost" @click="browseDir()">浏览</button>
         </div>
@@ -412,7 +421,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       <div x-show="batchResults.length" class="card" style="padding:0; overflow:hidden;">
         <div style="padding:12px 18px; border-bottom:1px solid var(--border);
                     display:flex; align-items:center; justify-content:space-between;">
-          <span class="lbl" style="margin:0;">处理结果</span>
+          <span class="lbl m0">处理结果</span>
           <span style="font-size:11px; color:var(--muted);"
                 x-text="`${batchResults.filter(r=>!r.error).length} / ${batchResults.length} 成功`"></span>
         </div>
@@ -455,15 +464,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <!-- ── 生成 EPUB ──────────────────────────────────── -->
     <div x-show="page==='epub'" class="page"
          style="max-width:620px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">TXT → EPUB</h1>
-        <p style="color:var(--muted);">清洗 TXT、编辑章节、配置封面，一键生成精排 EPUB</p>
+        <p class="c-muted">清洗 TXT、编辑章节、配置封面，一键生成精排 EPUB</p>
       </div>
 
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">TXT 文件</span>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="epubPath"
                  placeholder="/Users/…/novel.txt"
                  @change="onEpubFileChange()">
@@ -487,11 +496,11 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
       <!-- ── 章节编辑 ──────────────────────────────────── -->
       <div x-show="$store.catalog.working || $store.catalog.chapters.length > 0"
-           style="margin-bottom:12px;">
+           class="mb3">
         <!-- 折叠头 -->
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="lbl" style="margin:0;">章节编辑</span>
+            <span class="lbl m0">章节编辑</span>
             <span x-show="$store.catalog.stats.total_chapters > 0"
                   style="font-size:11px; padding:1px 8px; border-radius:99px;
                          background:rgba(217,119,6,.1); color:#d97706;"
@@ -526,7 +535,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                      style="width:64px; flex-shrink:0;" placeholder="#">
               <span class="sublbl" style="margin:0 0 0 6px; flex-shrink:0;">标题</span>
               <input class="inp" type="text" x-model="$store.catalog.editTitle"
-                     placeholder="选中章节后编辑" style="flex:1; min-width:120px;"
+                     placeholder="选中章节后编辑" class="f1-mn"
                      @keydown.enter="catalogApplyEdit()">
               <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;"
                       @click="catalogApplyEdit()" :disabled="$store.catalog.selected<0">✓ 应用</button>
@@ -604,12 +613,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
       <!-- ── /章节编辑 ─────────────────────────────────── -->
 
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">书籍信息</span>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
-              <div class="sublbl" style="margin:0;">书名</div>
+              <div class="sublbl m0">书名</div>
               <span x-show="epubMeta.title && !epubTitleEdited"
                     style="font-size:10px; padding:1px 6px; border-radius:99px;
                            background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
@@ -619,7 +628,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           </div>
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
-              <div class="sublbl" style="margin:0;">作者</div>
+              <div class="sublbl m0">作者</div>
               <span x-show="epubMeta.author && !epubAuthorEdited"
                     style="font-size:10px; padding:1px 6px; border-radius:99px;
                            background:rgba(217,119,6,.1); color:var(--amber);">自动识别</span>
@@ -643,7 +652,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </label>
           </template>
         </div>
-        <div x-show="epubCoverChoice==='local'" style="display:flex; gap:8px;">
+        <div x-show="epubCoverChoice==='local'" class="row8">
           <input class="inp" type="text" x-model="epubCoverPath"
                  placeholder="图片路径 (.jpg / .png / .webp)">
           <button class="btn btn-ghost" @click="browseCover()">浏览</button>
@@ -693,7 +702,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
               <div style="color:#34d399; font-weight:600; margin-bottom:2px;">✓ 封面已确认</div>
               <div style="color:var(--text); overflow:hidden; text-overflow:ellipsis;
                           white-space:nowrap;" x-text="epubCoverConfirmedTitle"></div>
-              <div style="color:var(--muted);" x-text="epubCoverConfirmedSource"></div>
+              <div class="c-muted" x-text="epubCoverConfirmedSource"></div>
               <button class="btn btn-ghost"
                       style="margin-top:8px; padding:3px 10px; font-size:11px;"
                       @click="epubCoverUrlConfirmed=''; epubCoverConfirmedTitle=''; epubCoverConfirmedSource=''">
@@ -759,13 +768,13 @@ tr:hover td { background: rgba(255,255,255,.015); }
       <div class="card" style="margin-bottom:16px;">
         <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
              @click="epubStyleOpen=!epubStyleOpen">
-          <span class="lbl" style="margin:0;">排版样式</span>
+          <span class="lbl m0">排版样式</span>
           <span style="font-size:11px; color:var(--dim);"
                 x-text="epubStyleOpen?'收起 ▲':'展开 ▼'"></span>
         </div>
         <div x-show="epubStyleOpen" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;">
           <div style="display:flex; gap:20px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:120px;">
+            <div class="f1-mn">
               <span class="sublbl">页面边距</span>
               <select class="inp" x-model="epubMargin">
                 <option value="0 2%">窄（2%）</option>
@@ -774,7 +783,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 <option value="0 8%">超宽（8%）</option>
               </select>
             </div>
-            <div style="flex:1; min-width:120px;">
+            <div class="f1-mn">
               <span class="sublbl">行间距</span>
               <select class="inp" x-model.number="epubLineHeight">
                 <option value="1.5">紧凑（1.5）</option>
@@ -783,7 +792,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 <option value="2.2">宽松（2.2）</option>
               </select>
             </div>
-            <div style="flex:1; min-width:120px;">
+            <div class="f1-mn">
               <span class="sublbl">首行缩进</span>
               <select class="inp" x-model="epubTextIndent">
                 <option value="0">无缩进</option>
@@ -855,12 +864,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </div>
 
-      <div style="margin-bottom:12px;">
+      <div class="mb3">
         <span class="lbl">输出目录（可选）</span>
         <div class="sublbl" style="margin-bottom:4px;">留空则写到输入文件同目录</div>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="epubOutputDir"
-                 placeholder="~/Books/epub-library" style="flex:1;">
+                 placeholder="~/Books/epub-library" class="f1">
           <button class="btn btn-ghost" @click="browseDir('epub-output-dir')">选择目录</button>
         </div>
       </div>
@@ -888,15 +897,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <!-- ── 目录查看 ───────────────────────────────────── -->
     <div x-show="page==='catalog'" class="page"
          style="max-width:740px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">目录编辑</h1>
-        <p style="color:var(--muted);">查看、编辑、重排章节，保存为新文件</p>
+        <p class="c-muted">查看、编辑、重排章节，保存为新文件</p>
       </div>
 
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">TXT 文件</span>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="$store.catalog.path"
                  placeholder="/Users/…/novel.txt" @keydown.enter="doLoadCatalog()">
           <button class="btn btn-ghost" @click="browseFile('catalog')">浏览</button>
@@ -909,7 +918,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <div x-show="$store.catalog.stats.total_chapters>0"
-           class="sublbl" style="margin-bottom:12px;">
+           class="sublbl" class="mb3">
         <span x-text="$store.catalog.stats.total_chapters"></span> 章 &nbsp;·&nbsp;
         <span x-text="($store.catalog.stats.total_lines||0).toLocaleString()"></span> 行 &nbsp;·&nbsp;
         <span x-text="($store.catalog.stats.total_chars||0).toLocaleString()"></span> 字
@@ -923,7 +932,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                  style="width:64px; flex-shrink:0;" placeholder="#">
           <span class="sublbl" style="margin:0 0 0 6px; flex-shrink:0;">标题</span>
           <input class="inp" type="text" x-model="$store.catalog.editTitle"
-                 placeholder="选中章节后编辑" style="flex:1; min-width:120px;"
+                 placeholder="选中章节后编辑" class="f1-mn"
                  @keydown.enter="catalogApplyEdit()">
           <button class="btn btn-ghost" style="padding:6px 12px; font-size:12px;"
                   @click="catalogApplyEdit()" :disabled="$store.catalog.selected<0">✓ 应用</button>
@@ -958,7 +967,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       <div x-show="$store.catalog.chapters.length" class="card" style="padding:0; overflow:hidden;">
         <div style="padding:12px 18px; border-bottom:1px solid var(--border);
                     display:flex; align-items:center; justify-content:space-between;">
-          <span class="lbl" style="margin:0;">章节目录</span>
+          <span class="lbl m0">章节目录</span>
           <span style="font-size:11px; color:var(--muted);"
                 x-text="`共 ${$store.catalog.chapters.length} 章`"></span>
         </div>
@@ -1013,14 +1022,14 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page"
          x-init="$watch('$store.catalog.filePath', v => { if(v && !adScanPath) adScanPath=v })"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">广告过滤规则</h1>
-        <p style="color:var(--muted);">配置关键词列表与匹配分值阈值，设置全局生效</p>
+        <p class="c-muted">配置关键词列表与匹配分值阈值，设置全局生效</p>
       </div>
 
       <!-- 广告扫描 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">扫描广告（预览，不删除）</span>
         <div style="display:flex; gap:8px; margin-bottom:10px;">
           <input class="inp" type="text" x-model="adScanPath"
@@ -1108,7 +1117,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
              style="margin-top:8px; padding:8px 12px;
                     background:rgba(52,211,153,.05); border:1px solid rgba(52,211,153,.15);
                     border-radius:6px; font-size:12px; display:flex; align-items:center; gap:8px;">
-          <span style="color:var(--muted);">输出：</span>
+          <span class="c-muted">输出：</span>
           <span style="color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                 x-text="basename(adDeleteOutput)"></span>
           <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
@@ -1117,10 +1126,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 强匹配关键词 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <span class="lbl" style="margin:0;">强匹配关键词</span>
-          <span class="sublbl" style="margin:0;">命中即视为广告（分值 ≥ 0.78）</span>
+          <span class="lbl m0">强匹配关键词</span>
+          <span class="sublbl m0">命中即视为广告（分值 ≥ 0.78）</span>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
           <template x-for="(kw, i) in adHardKw" :key="i">
@@ -1137,18 +1146,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
           </template>
           <span x-show="adHardKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="adHardKwInput" placeholder="输入关键词后回车添加"
-                 @keydown.enter="addAdHardKw()" style="flex:1;">
+                 @keydown.enter="addAdHardKw()" class="f1">
           <button class="btn btn-ghost" @click="addAdHardKw()">添加</button>
         </div>
       </div>
 
       <!-- 软匹配关键词 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <span class="lbl" style="margin:0;">软匹配关键词</span>
-          <span class="sublbl" style="margin:0;">每命中一条加 0.18 分</span>
+          <span class="lbl m0">软匹配关键词</span>
+          <span class="sublbl m0">每命中一条加 0.18 分</span>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
           <template x-for="(kw, i) in adSoftKw" :key="i">
@@ -1165,9 +1174,9 @@ tr:hover td { background: rgba(255,255,255,.015); }
           </template>
           <span x-show="adSoftKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="adSoftKwInput" placeholder="输入关键词后回车添加"
-                 @keydown.enter="addAdSoftKw()" style="flex:1;">
+                 @keydown.enter="addAdSoftKw()" class="f1">
           <button class="btn btn-ghost" @click="addAdSoftKw()">添加</button>
         </div>
       </div>
@@ -1228,17 +1237,17 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <!-- ── 章节规则 ──────────────────────────────────── -->
     <div x-show="page==='chapterRules'" x-data="chapterRulesPanel()" class="page"
          style="max-width:640px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">章节识别规则</h1>
-        <p style="color:var(--muted);">自定义正则规则优先于内置规则匹配，全局生效</p>
+        <p class="c-muted">自定义正则规则优先于内置规则匹配，全局生效</p>
       </div>
 
       <!-- 自定义规则列表 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <span class="lbl" style="margin:0;">自定义规则</span>
-          <span class="sublbl" style="margin:0;">优先于内置规则</span>
+          <span class="lbl m0">自定义规则</span>
+          <span class="sublbl m0">优先于内置规则</span>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px; min-height:24px; margin-bottom:10px;">
@@ -1262,7 +1271,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           </span>
         </div>
 
-        <div style="display:flex; gap:8px;">
+        <div class="row8">
           <input class="inp" type="text" x-model="newChapterPattern"
                  placeholder="输入正则表达式后回车添加，如 ^第(\d+)回\s*(.*)$"
                  style="flex:1; font-family:'JetBrains Mono',monospace; font-size:12px;"
@@ -1281,7 +1290,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 说明 + 示例 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">写法说明</span>
         <p style="font-size:12px; color:var(--muted); line-height:1.8; margin-bottom:10px;">
           正则须包含 <strong>两个捕获组</strong>：第 1 组匹配章节号，第 2 组匹配标题（可用 <code style="color:var(--text);">(.*)</code> 表示可为空）。
@@ -1311,10 +1320,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 内置默认规则（折叠） -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
              @click="chapterDefaultsOpen=!chapterDefaultsOpen">
-          <span class="lbl" style="margin:0;">内置默认规则</span>
+          <span class="lbl m0">内置默认规则</span>
           <span style="font-size:12px; color:var(--muted);"
                 x-text="chapterDefaultsOpen?'▲ 收起':'▼ 展开 '+chapterDefaultPatterns.length+' 条'"></span>
         </div>
@@ -1354,18 +1363,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
     <!-- ── EPUB 编辑器 ────────────────────────────── -->
     <div x-show="page==='editor'" x-data="editorPanel()" class="page"
          style="max-width:960px; margin:0 auto; padding:32px 24px;">
-      <div style="margin-bottom:24px;">
+      <div class="mb6">
         <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
                    color:var(--text); margin-bottom:4px;">EPUB 编辑器</h1>
-        <p style="color:var(--muted);">加载 .epub 或 .txt 文件，编辑章节内容后一键重建为 EPUB</p>
+        <p class="c-muted">加载 .epub 或 .txt 文件，编辑章节内容后一键重建为 EPUB</p>
       </div>
 
       <!-- 加载文件 -->
-      <div class="card" style="margin-bottom:12px;">
+      <div class="card" class="mb3">
         <span class="lbl">加载文件</span>
         <div style="display:flex; gap:8px; margin-bottom:8px;">
           <input class="inp" type="text" x-model="editorPath"
-                 placeholder="选择 .epub 或 .txt 文件…" readonly style="flex:1;">
+                 placeholder="选择 .epub 或 .txt 文件…" readonly class="f1">
           <button class="btn btn-ghost" @click="editorBrowse()">浏览…</button>
           <button class="btn btn-amber" @click="editorLoad()"
                   :disabled="!editorPath||editorWorking">
@@ -1395,7 +1404,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <!-- 章节列表 -->
           <div class="card" style="padding:0; overflow:hidden;">
             <div style="padding:10px 12px; border-bottom:1px solid var(--border);">
-              <span class="lbl" style="margin:0;">章节列表</span>
+              <span class="lbl m0">章节列表</span>
             </div>
             <div style="max-height:440px; overflow-y:auto;">
               <template x-for="(ch, i) in editorChapters" :key="i">
@@ -1423,7 +1432,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
               <div style="display:flex; align-items:center; justify-content:space-between;
                           margin-bottom:10px;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <span class="lbl" style="margin:0;">编辑章节</span>
+                  <span class="lbl m0">编辑章节</span>
                   <span x-show="editorChDirty"
                         style="font-size:10px; color:var(--amber); padding:1px 6px;
                                border-radius:99px; background:rgba(217,119,6,.12);">未保存</span>
@@ -1447,7 +1456,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                                font-family:inherit;"></textarea>
               <div style="display:flex; align-items:center; justify-content:space-between;
                           margin-top:8px;">
-                <span class="sublbl" style="margin:0;"
+                <span class="sublbl m0"
                       x-text="editorChContent.length+'字'"></span>
                 <button class="btn btn-amber" @click="editorSaveChapter()"
                         :disabled="editorChWorking">
@@ -1464,12 +1473,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
 
         <!-- 查找 / 替换 -->
-        <div class="card" style="margin-bottom:12px;">
+        <div class="card" class="mb3">
           <span class="lbl">查找 / 替换</span>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
             <div style="display:flex; gap:6px;">
               <input class="inp" type="text" x-model="editorFindQuery"
-                     placeholder="查找关键词…" style="flex:1;"
+                     placeholder="查找关键词…" class="f1"
                      @keydown.enter="editorFind()">
               <button class="btn btn-ghost" @click="editorFind()"
                       :disabled="editorFindWorking||!editorFindQuery">
@@ -1478,9 +1487,9 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </div>
             <div style="display:flex; gap:6px; align-items:center;">
               <input class="inp" type="text" x-model="editorReplaceFrom"
-                     placeholder="查找（替换用）…" style="flex:1;">
+                     placeholder="查找（替换用）…" class="f1">
               <input class="inp" type="text" x-model="editorReplaceTo"
-                     placeholder="替换为…" style="flex:1;">
+                     placeholder="替换为…" class="f1">
               <button class="btn btn-amber" @click="editorReplace()"
                       :disabled="editorReplaceWorking||!editorReplaceFrom">
                 <span x-show="editorReplaceWorking" class="spin"></span>替换
@@ -1510,10 +1519,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
 
         <!-- 元数据编辑 -->
-        <div class="card" style="margin-bottom:12px;">
+        <div class="card" class="mb3">
           <div style="display:flex; align-items:center; justify-content:space-between;
                       cursor:pointer;" @click="editorMetaOpen=!editorMetaOpen">
-            <span class="lbl" style="margin:0;">书籍元数据</span>
+            <span class="lbl m0">书籍元数据</span>
             <span style="font-size:12px; color:var(--muted);"
                   x-text="editorMetaOpen?'▲ 收起':'▼ 展开'"></span>
           </div>
@@ -1555,12 +1564,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <div class="sublbl">输出路径（留空则写入 ~/.txt2epub/output/）</div>
           <div style="display:flex; gap:8px; margin-bottom:8px;">
             <input class="inp" type="text" x-model="editorBuildOutput"
-                   placeholder="~/.txt2epub/output/书名.epub" style="flex:1;">
+                   placeholder="~/.txt2epub/output/书名.epub" class="f1">
           </div>
           <div class="sublbl" style="margin-bottom:4px;">或指定输出目录，优先级低于上方完整路径</div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
             <input class="inp" type="text" x-model="editorOutputDir"
-                   placeholder="~/Books/epub-library" style="flex:1;">
+                   placeholder="~/Books/epub-library" class="f1">
             <button class="btn btn-ghost" @click="browseDir('editor-output-dir')">选择目录</button>
           </div>
           <button class="btn btn-amber" style="width:100%; font-size:14px; padding:10px;"
