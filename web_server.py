@@ -309,7 +309,7 @@ class EpubReq(BaseModel):
     illustrations: list = []
     # 自动生成封面风格（空字符串 = 不生成；"minimal_light" 等见 cover_gen.py）
     generate_cover_style: str = ""
-    # 书库输出目录（留空则写到输入文件同目录），用于 Kavita 等书库直接接收
+    # 输出目录（留空则写到输入文件同目录）
     output_dir: str = ""
 
 
@@ -1077,7 +1077,7 @@ class EditorBuildReq(BaseModel):
     fonts: dict = {}
     illustrations: list = []
     generate_cover_style: str = ""
-    # 书库输出目录（优先级低于 output_path），用于 Kavita 等书库直接接收
+    # 输出目录（优先级低于 output_path）
     output_dir: str = ""
 
 
