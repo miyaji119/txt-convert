@@ -638,7 +638,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                           cursor:pointer; user-select:none; color:var(--muted);">
               <input type="radio" :value="opt.value" x-model="epubCoverChoice"
                      style="accent-color:#d97706; cursor:pointer;"
-                     @change="opt.value==='generate' && epubTitle && selectCoverStyle(epubCoverStyle)">
+                     @change="opt.value !== 'auto' && (epubCoverUrlConfirmed = epubCoverConfirmedTitle = epubCoverConfirmedSource = ''); opt.value === 'generate' && epubTitle && selectCoverStyle(epubCoverStyle)">
               <span x-text="opt.label"></span>
             </label>
           </template>
@@ -650,6 +650,42 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
         <div x-show="epubCoverChoice==='url'">
           <input class="inp" type="text" x-model="epubCoverUrl" placeholder="https://…">
+        </div>
+
+        <!-- 自动搜索封面 -->
+        <div x-show="epubCoverChoice==='auto'" style="margin-top:10px;">
+          <!-- 尚未确认封面 -->
+          <div x-show="!epubCoverUrlConfirmed"
+               style="display:flex; align-items:center; gap:10px;">
+            <button class="btn btn-ghost" @click="doSearchCover()"
+                    :disabled="coverSearching || !epubTitle"
+                    style="font-size:12px; padding:6px 14px;">
+              <span x-show="coverSearching" class="spin"></span>
+              <span x-text="coverSearching ? '搜索中…' : '🔍  搜索封面'"></span>
+            </button>
+            <span x-show="!epubTitle"
+                  style="font-size:11px; color:var(--muted);">请先填写书名</span>
+          </div>
+          <!-- 已确认封面预览 -->
+          <div x-show="epubCoverUrlConfirmed"
+               style="display:flex; align-items:flex-start; gap:14px; padding:10px 12px;
+                      border-radius:8px; background:rgba(52,211,153,.05);
+                      border:1px solid rgba(52,211,153,.18);">
+            <img :src="`/api/cover-proxy?url=${encodeURIComponent(epubCoverUrlConfirmed)}`"
+                 style="width:54px; height:81px; border-radius:5px; object-fit:cover;
+                        flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,.4);">
+            <div style="flex:1; min-width:0; font-size:11px; line-height:1.6;">
+              <div style="color:#34d399; font-weight:600; margin-bottom:2px;">✓ 封面已确认</div>
+              <div style="color:var(--text); overflow:hidden; text-overflow:ellipsis;
+                          white-space:nowrap;" x-text="epubCoverConfirmedTitle"></div>
+              <div style="color:var(--muted);" x-text="epubCoverConfirmedSource"></div>
+              <button class="btn btn-ghost"
+                      style="margin-top:8px; padding:3px 10px; font-size:11px;"
+                      @click="epubCoverUrlConfirmed=''; epubCoverConfirmedTitle=''; epubCoverConfirmedSource=''">
+                重新搜索
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 自动生成风格选择 -->
@@ -2111,6 +2147,7 @@ function app() {
     epubStyleOpen:false,
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
     coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
+    epubCoverUrlConfirmed:'', epubCoverConfirmedTitle:'', epubCoverConfirmedSource:'',
     _epubResolve:null,
     coverOptions:[
       { value:'none',  label:'无封面' },
@@ -2229,6 +2266,7 @@ function app() {
     async onEpubFileChange() {
       if (!this.epubPath) return
       this.epubTitleEdited=false; this.epubAuthorEdited=false; this.epubCatalogOpen=false
+      this.epubCoverUrlConfirmed=''; this.epubCoverConfirmedTitle=''; this.epubCoverConfirmedSource=''
       this.$store.catalog.filePath = this.epubPath
       try {
         const r = await this.post('/api/extract-meta', { path:this.epubPath })
@@ -2250,23 +2288,15 @@ function app() {
       }
 
       if (this.epubCoverChoice === 'auto') {
-        const title = this.epubTitle || ''
-        if (!title) { this.toast('需要书名', '请填写书名以搜索封面', false); return }
-        this.coverCandidates = []; this.coverSelected = null
-        this.coverSearching = true; this.coverPickerVisible = true
-        this.setStatus('搜索封面中…')
-        try {
-          const r = await this.post('/api/epub/search-covers',
-                                    { title, author: this.epubAuthor || '' })
-          this.coverCandidates = r.candidates || []
-        } catch(e) {
-          this.coverCandidates = []
+        // 已预先确认封面，直接生成
+        if (this.epubCoverUrlConfirmed) {
+          await this._generateEpub('', this.epubCoverUrlConfirmed)
+          return
         }
-        this.coverSearching = false
-        const choice = await new Promise(resolve => { this._epubResolve = resolve })
-        this.coverPickerVisible = false
-        if (choice === 'cancel') { this.setStatus('已取消'); return }
-        await this._generateEpub('', choice === 'skip' ? '' : choice)
+        // 尚未确认，先搜索选择
+        const chosen = await this.doSearchCover()
+        if (!chosen) return
+        await this._generateEpub('', chosen)
         return
       }
 
@@ -2275,6 +2305,33 @@ function app() {
         this.epubCoverChoice === 'url'   ? this.epubCoverUrl  : '',
         ''
       )
+    },
+
+    async doSearchCover() {
+      const title = this.epubTitle || ''
+      if (!title) { this.toast('需要书名', '请填写书名以搜索封面', false); return null }
+      this.coverCandidates = []; this.coverSelected = null
+      this.coverSearching = true; this.coverPickerVisible = true
+      this.setStatus('搜索封面中…')
+      try {
+        const r = await this.post('/api/epub/search-covers',
+                                  { title, author: this.epubAuthor || '' })
+        this.coverCandidates = r.candidates || []
+      } catch(e) {
+        this.coverCandidates = []
+      }
+      this.coverSearching = false
+      const choice = await new Promise(resolve => { this._epubResolve = resolve })
+      this.coverPickerVisible = false
+      if (choice === 'cancel') { this.setStatus('就绪'); return null }
+      if (choice === 'skip')   { return '' }
+      // 存储确认结果，供 UI 预览
+      this.epubCoverUrlConfirmed = choice
+      const c = this.coverCandidates.find(c => c.image_url === choice)
+      this.epubCoverConfirmedTitle  = c ? (c.book_title || '') : ''
+      this.epubCoverConfirmedSource = c ? (c.source_name || '') : ''
+      this.setStatus('就绪')
+      return choice
     },
 
     async _generateEpub(coverImage, coverUrl, genStyle='') {
