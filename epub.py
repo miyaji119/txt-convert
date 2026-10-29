@@ -369,16 +369,24 @@ class EPUBGenerator:
     )
 
     @staticmethod
-    def _h1_tag(chapter_title: str, style_key: str) -> str:
+    def _h1_tag(chapter_title: str, style_key: str, ch_num: int = 0) -> str:
         style_def = EPUBGenerator.CHAPTER_TITLE_STYLES.get(style_key, {})
         if style_def.get('split'):
             m = EPUBGenerator._CHAP_NUM_RE.match(chapter_title)
             if m and m.group(2).strip():
+                # 标准编号 + 标题文字 → 正常拆分
                 inner = (
                     f'<span class="ch-num">{m.group(1)}</span>'
                     f'<span class="ch-title">{m.group(2).strip()}</span>'
                 )
+            elif not m and ch_num > 0:
+                # 无编号前缀 → 自动补"第N章"
+                inner = (
+                    f'<span class="ch-num">第{ch_num}章</span>'
+                    f'<span class="ch-title">{chapter_title}</span>'
+                )
             else:
+                # 特殊命名章节（序章/楔子等）或兜底：整个标题放 ch-title
                 inner = f'<span class="ch-title">{chapter_title}</span>'
         else:
             inner = chapter_title
@@ -1166,6 +1174,13 @@ class EPUBGenerator:
                         css_item.content = (_font_css + css_item.content.decode('utf-8')).encode('utf-8')
                 except ImportError:
                     print("   ⚠️ font_subset 模块不可用，跳过字体嵌入")
+            # 预计算每章的顺序编号（非特殊页、非卷标题），供分行样式自动补编号
+            _ch_seq: dict = {}
+            _seq = 0
+            for _i, _ch in enumerate(chapters):
+                if '_html' not in _ch and not EPUBGenerator._VOLUME_RE.match(_ch['title']):
+                    _seq += 1
+                    _ch_seq[_i] = _seq
             for i, chapter in enumerate(chapters):
                 chapter_title = chapter['title']
                 has_author_note = False
@@ -1234,7 +1249,7 @@ class EPUBGenerator:
                     f'<body epub:type="{body_type}">\n'
                     f'{header_html}'
                     '<div class="content">\n'
-                    f'{EPUBGenerator._h1_tag(chapter_title, chapter_title_style)}'
+                    f'{EPUBGenerator._h1_tag(chapter_title, chapter_title_style, _ch_seq.get(i, 0))}'
                     f'{html_content}\n'
                     '</div>\n'
                     '</body>\n'
