@@ -6,3 +6,5 @@ __pycache__/
 .DS_Store
 # Ignore tests directory
 tests/
+# Ignore pytest cache
+.pytest_cache/
