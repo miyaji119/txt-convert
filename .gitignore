@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 # Ignore .DS_Store
 .DS_Store
+# Ignore tests directory
+tests/
