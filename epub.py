@@ -231,6 +231,10 @@ class EPUBGenerator:
     _VOLUME_RE = re.compile(
         r'^(第[零一二三四五六七八九十百千万两\d]+卷|卷[零一二三四五六七八九十百千万两\d]|[上中下]卷)'
     )
+    # 用于分行样式：将"第X章 标题"拆成编号部分和标题部分
+    _CHAP_NUM_RE = re.compile(
+        r'^(第[零一二三四五六七八九十百千万两\d]+[章节回卷篇]|番外[篇章]?|序章|尾声|后记|楔子|引子)[：:，,\s]*(.*?)$'
+    )
 
     # 章节标题样式预设：key → {name, h1_css}
     # h1_css 会追加到样式表末尾，覆盖 _CSS_TEMPLATE 中的默认 h1 规则
@@ -290,6 +294,35 @@ class EPUBGenerator:
                 'letter-spacing:.12em'
             ),
         },
+        'split_plain': {
+            'name': '分行·极简',
+            'desc': '编号与标题各占一行，无装饰',
+            'split': True,
+            'h1_css': (
+                'font-size:1.2em;font-weight:normal;text-align:center;'
+                'line-height:1;margin:2.2em 0 2em'
+            ),
+            'extra_css': (
+                'h1 .ch-num{display:block;font-size:.8em;font-weight:normal;'
+                'letter-spacing:.25em;color:#888888;margin-bottom:.55em}'
+                'h1 .ch-title{display:block;font-size:1.1em;font-weight:bold;letter-spacing:.18em}'
+            ),
+        },
+        'split_ruled': {
+            'name': '分行·细线',
+            'desc': '编号在上，细横线分隔，标题在下',
+            'split': True,
+            'h1_css': (
+                'font-size:1.2em;font-weight:normal;text-align:center;'
+                'line-height:1;margin:2em 0 1.8em'
+            ),
+            'extra_css': (
+                'h1 .ch-num{display:block;font-size:.8em;font-weight:normal;'
+                'letter-spacing:.2em;color:#666666;padding-bottom:.5em;'
+                'margin-bottom:.5em;border-bottom:1px solid #bbbbbb}'
+                'h1 .ch-title{display:block;font-size:1.1em;font-weight:bold;letter-spacing:.18em}'
+            ),
+        },
     }
 
     _CSS_TEMPLATE = (
@@ -335,6 +368,22 @@ class EPUBGenerator:
         'line-height:1.72;margin:.18em 0;font-style:italic}}'
     )
 
+    @staticmethod
+    def _h1_tag(chapter_title: str, style_key: str) -> str:
+        style_def = EPUBGenerator.CHAPTER_TITLE_STYLES.get(style_key, {})
+        if style_def.get('split'):
+            m = EPUBGenerator._CHAP_NUM_RE.match(chapter_title)
+            if m and m.group(2).strip():
+                inner = (
+                    f'<span class="ch-num">{m.group(1)}</span>'
+                    f'<span class="ch-title">{m.group(2).strip()}</span>'
+                )
+            else:
+                inner = f'<span class="ch-title">{chapter_title}</span>'
+        else:
+            inner = chapter_title
+        return f'<h1>{inner}</h1>\n'
+
     @classmethod
     def _build_css(cls, margin: str = "0 4%", line_height: float = 1.8,
                    text_indent: str = "2em", custom_css: str = "",
@@ -346,8 +395,10 @@ class EPUBGenerator:
             margin=margin, line_height=line_height, text_indent=text_indent
         )
         if chapter_title_style and chapter_title_style in cls.CHAPTER_TITLE_STYLES:
-            h1_css = cls.CHAPTER_TITLE_STYLES[chapter_title_style]['h1_css']
-            css += f'h1{{{h1_css}}}'
+            style_def = cls.CHAPTER_TITLE_STYLES[chapter_title_style]
+            css += f'h1{{{style_def["h1_css"]}}}'
+            if style_def.get('extra_css'):
+                css += style_def['extra_css']
         if chapter_title_align in ('left', 'right', 'center'):
             css += f'h1{{text-align:{chapter_title_align}}}'
         # 从 style_presets 生成 span/block CSS（优先于旧 dialog_styles）
@@ -1183,7 +1234,7 @@ class EPUBGenerator:
                     f'<body epub:type="{body_type}">\n'
                     f'{header_html}'
                     '<div class="content">\n'
-                    f'<h1>{chapter_title}</h1>\n'
+                    f'{EPUBGenerator._h1_tag(chapter_title, chapter_title_style)}'
                     f'{html_content}\n'
                     '</div>\n'
                     '</body>\n'

@@ -814,7 +814,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                   <!-- 标题样式小样 -->
                   <div style="background:#fff; border-radius:4px; padding:6px 8px; margin-bottom:5px;
                                font-family:'Noto Serif SC',serif; font-size:11px; color:#1c1c1c;">
-                    <div :style="s.preview_style">第一章</div>
+                    <div :style="s.preview_style" x-html="s.preview_html || '第一章'"></div>
                   </div>
                   <span style="font-size:10px; color:var(--muted);" x-text="s.name"></span>
                 </div>
@@ -849,8 +849,8 @@ tr:hover td { background: rgba(255,255,255,.015); }
                           font-family:'Noto Serif SC',serif; font-size:15px;"
                    :style="`padding: 16px ${epubMargin.split(' ').pop()};`">
                 <div :style="(epubTitleStyles.find(s=>s.key===epubTitleStyle)?.preview_style||'font-weight:bold;text-align:center;padding-bottom:5px;border-bottom:1px solid #999;letter-spacing:.12em;font-size:12px;') + 'text-align:' + epubTitleAlign + ';'"
-                     style="margin-bottom:1.2em;">
-                  第一章 序章
+                     style="margin-bottom:1.2em;"
+                     x-html="epubTitleStyles.find(s=>s.key===epubTitleStyle)?.preview_html || '第一章 序章'">
                 </div>
                 <p :style="`line-height:${epubLineHeight}; text-indent:${epubTextIndent}; margin-bottom:${epubLineHeight * 0.4}em;`">
                   这是正文段落示例。秋风吹过，叶落知秋，岁月匆匆，转眼又是一年光景。她回过头，窗外的银杏叶正一片片落下，像是时光的印记。
@@ -2325,6 +2325,12 @@ function app() {
           preview_style:'font-weight:bold;text-align:center;padding-bottom:4px;border-bottom:2.5px solid #222;letter-spacing:.18em;font-size:12px;color:#1a1a1a;' },
         { key:'card',     name:'浅底',
           preview_style:'font-weight:bold;text-align:center;padding:4px 8px;background:#efefef;border-top:1px solid #ccc;border-bottom:1px solid #ccc;letter-spacing:.12em;font-size:12px;color:#1a1a1a;' },
+        { key:'split_plain', name:'分行·极简',
+          preview_style:'text-align:center;font-size:11px;color:#1a1a1a;line-height:1.5;',
+          preview_html:'<span style="display:block;font-size:.85em;color:#888;letter-spacing:.2em">第一章</span><span style="display:block;font-weight:bold;letter-spacing:.15em">序章</span>' },
+        { key:'split_ruled', name:'分行·细线',
+          preview_style:'text-align:center;font-size:11px;color:#1a1a1a;line-height:1.5;',
+          preview_html:'<span style="display:block;font-size:.85em;color:#666;letter-spacing:.2em;padding-bottom:3px;border-bottom:1px solid #bbb;margin-bottom:4px">第一章</span><span style="display:block;font-weight:bold;letter-spacing:.15em">序章</span>' },
       ]
     },
     async selectCoverStyle(key) {
