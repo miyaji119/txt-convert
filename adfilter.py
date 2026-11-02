@@ -32,6 +32,19 @@ class AdFilter:
         re.I,
     )
 
+    # 行内夹带广告片段：正文末尾追加的"记住网址xxx.cc"等，需截取而非整行删除
+    _INLINE_AD_FRAG_RE = re.compile(
+        r'[\s,，。]*'
+        r'(?:记住(?:本站|本书|网址|网站|域名|地址)?|'
+        r'最(?:新|快)(?:更新)?(?:地址|网址|网站)?(?:请?(?:到|访问))?|'
+        r'请(?:记住|访问|收藏|到)|'
+        r'本(?:书|章|文)(?:首发|来自|更新)(?:于|在)?)'
+        r'[\s,，。：:]*'
+        r'[A-Za-z0-9]+(?:[.][A-Za-z0-9]+){1,3}'
+        r'[^\n,，。！？]{0,30}',
+        re.I,
+    )
+
     # 高置信度正则模式（不可被用户 hard_kw 参数覆盖）
     _HARD_RE = [
         re.compile(r'想看更多.{0,20}(小说|访问|请)',          re.I),
@@ -60,6 +73,40 @@ class AdFilter:
     ]
 
     _SOFT_KW = ['书友', '更新最快', '收藏推荐', '关注', '手机看书', '下载', '求订阅']
+
+    @staticmethod
+    def _fw_normalize(s: str) -> str:
+        """全角字母/数字/标点 → 半角 ASCII，用于反混淆 URL 检测。
+
+        字符长度不变（1:1 映射），位置偏移在原始串中仍然有效。
+        """
+        result = []
+        for ch in s:
+            cp = ord(ch)
+            if 0xFF01 <= cp <= 0xFF5E:   # 全角 ！-～ → 半角 !-~
+                result.append(chr(cp - 0xFEE0))
+            elif cp == 0x3000:            # 全角空格 → 普通空格
+                result.append(' ')
+            else:
+                result.append(ch)
+        return ''.join(result)
+
+    @classmethod
+    def _strip_inline_ads(cls, line: str) -> str:
+        """从正文行中截除末尾内嵌的广告片段（如"记住网址xxx.cc"）。
+
+        只在广告片段之前有足够正文内容（≥6 个汉字）时才截取，
+        避免把纯广告行改成空行（纯广告行由普通评分逻辑整行删除）。
+        归一化后匹配，切点映射回原始行（长度 1:1 不变）。
+        """
+        norm = cls._fw_normalize(line)
+        m = cls._INLINE_AD_FRAG_RE.search(norm)
+        if not m:
+            return line
+        cjk_before = sum(1 for ch in line[:m.start()] if '一' <= ch <= '鿿')
+        if cjk_before < 4:
+            return line
+        return line[:m.start()].rstrip('，。 \t')
 
     @classmethod
     def _split_url_indices(cls, lines: list) -> set:
@@ -95,11 +142,12 @@ class AdFilter:
 
         score = 0.0
 
-        if cls._URL_RE.search(s):
+        s_norm = cls._fw_normalize(s)
+        if cls._URL_RE.search(s_norm):
             score = max(score, 0.88)
-        if cls._PIRACY_RE.search(s):
+        if cls._PIRACY_RE.search(s_norm):
             score = max(score, 0.85)
-        if cls._PLATFORM_RE.search(s):
+        if cls._PLATFORM_RE.search(s_norm):
             score = max(score, 0.82)
 
         # 高置信度正则（始终检查，不受 hard_kw 覆盖影响）
@@ -182,6 +230,13 @@ class AdFilter:
         """
         lines = content.split('\n')
         n = len(lines)
+
+        # 先截除行内夹带的广告片段（正文+广告混合行 → 只保留正文部分）
+        for i, line in enumerate(lines):
+            stripped = cls._strip_inline_ads(line)
+            if stripped != line:
+                lines[i] = stripped
+
         scores = [
             cls._score(line,
                        near_boundary=(i < head_tail_lines or i >= n - head_tail_lines),
