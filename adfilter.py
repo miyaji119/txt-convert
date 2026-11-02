@@ -34,7 +34,7 @@ class AdFilter:
 
     # 行内夹带广告片段：正文末尾追加的"记住网址xxx.cc"等，需截取而非整行删除
     _INLINE_AD_FRAG_RE = re.compile(
-        r'[\s,，。]*'
+        r'[\s,，]*'
         r'(?:记住(?:本站|本书|网址|网站|域名|地址)?|'
         r'最(?:新|快)(?:更新)?(?:地址|网址|网站)?(?:请?(?:到|访问))?|'
         r'请(?:记住|访问|收藏|到)|'
@@ -106,7 +106,7 @@ class AdFilter:
         cjk_before = sum(1 for ch in line[:m.start()] if '一' <= ch <= '鿿')
         if cjk_before < 4:
             return line
-        return line[:m.start()].rstrip('，。 \t')
+        return line[:m.start()].rstrip('，, \t')
 
     @classmethod
     def _split_url_indices(cls, lines: list) -> set:
