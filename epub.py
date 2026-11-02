@@ -1132,7 +1132,7 @@ class EPUBGenerator:
                                     _header_fixed[cn - 1] = h_cfg
                 except ImportError:
                     print("   ⚠️ header_image 模块不可用，跳过头图")
-            spine = ['nav']
+            spine = [('nav', 'no')]
             toc = []
             _cur_vol_sec = None
             _cur_vol_children: list = []
