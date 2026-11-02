@@ -48,7 +48,7 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--ink);
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 [x-cloak] { display: none !important; }
@@ -103,6 +103,7 @@ body {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
   border-radius: 7px;
@@ -114,6 +115,7 @@ body {
   white-space: nowrap;
   border: none;
   flex-shrink: 0;
+  min-height: 38px;
 }
 .btn-amber {
   background: linear-gradient(135deg, #d97706, #b45309);
@@ -311,33 +313,381 @@ tr:hover td { background: rgba(255,255,255,.015); }
 .f1-mn { flex: 1; min-width: 120px; }
 .row8 { display: flex; gap: 8px; }
 .c-muted { color: var(--muted); }
+
+/* ── App shell / UX polish ───────────────────────────── */
+.app-body {
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  overflow:hidden;
+}
+.app-header {
+  flex-shrink:0;
+  height:56px;
+  display:flex;
+  align-items:center;
+  padding:0 22px;
+  gap:14px;
+  background:linear-gradient(180deg, var(--panel), rgba(19,24,32,.96));
+  border-bottom:1px solid var(--border);
+}
+.brand-mark {
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  background:linear-gradient(135deg,#d97706,#b45309);
+  box-shadow:0 8px 26px rgba(217,119,6,.28);
+}
+.app-layout { display:flex; flex:1; min-height:0; overflow:hidden; }
+.app-sidebar {
+  flex-shrink:0;
+  width:210px;
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  padding:10px 0;
+  overflow-y:auto;
+}
+.app-main {
+  flex:1;
+  min-width:0;
+  overflow-y:auto;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(217,119,6,.08), transparent 28%),
+    radial-gradient(circle at 82% 12%, rgba(80,98,120,.12), transparent 26%),
+    var(--ink);
+}
+.theme-toggle {
+  min-width:36px;
+  min-height:36px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--border);
+  color:var(--text);
+  cursor:pointer;
+  font-size:16px;
+  border-radius:10px;
+  transition:background .15s, border-color .15s, transform .15s;
+}
+.theme-toggle:hover { background:rgba(255,255,255,.08); border-color:var(--bh); transform:translateY(-1px); }
+.nav-separator {
+  margin:12px 10px 4px;
+  padding:8px 8px 5px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.1em;
+  color:var(--dim);
+  text-transform:uppercase;
+  border-top:1px solid var(--border);
+}
+.nav-item {
+  margin:2px 8px;
+  border-radius:10px;
+  border-right:0;
+}
+.nav-active {
+  border-right-color:transparent !important;
+  box-shadow:inset 0 0 0 1px rgba(217,119,6,.18);
+}
+.page-wrap {
+  max-width:980px;
+  margin:0 auto;
+  padding:34px 28px 132px;
+}
+.page-hero {
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap:22px;
+  align-items:end;
+  padding:26px;
+  margin-bottom:18px;
+  border:1px solid var(--border);
+  border-radius:22px;
+  background:
+    linear-gradient(135deg, rgba(217,119,6,.16), transparent 44%),
+    linear-gradient(180deg, rgba(255,255,255,.035), transparent),
+    var(--card);
+  box-shadow:0 24px 70px rgba(0,0,0,.18);
+}
+.page-hero::after {
+  content:"";
+  position:absolute;
+  right:-60px;
+  top:-80px;
+  width:220px;
+  height:220px;
+  border-radius:999px;
+  background:rgba(217,119,6,.14);
+  filter:blur(8px);
+  pointer-events:none;
+}
+.hero-kicker {
+  position:relative;
+  z-index:1;
+  color:var(--amber);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.hero-title {
+  position:relative;
+  z-index:1;
+  font-family:'Noto Serif SC',serif;
+  font-size:30px;
+  line-height:1.15;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:-.03em;
+  margin-bottom:8px;
+}
+.hero-desc { position:relative; z-index:1; color:var(--muted); line-height:1.7; }
+.hero-stats {
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:repeat(3, minmax(82px, 1fr));
+  gap:8px;
+  min-width:290px;
+}
+.hero-stat {
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(0,0,0,.16);
+}
+.hero-stat strong {
+  display:block;
+  color:var(--text);
+  font-size:15px;
+  margin-bottom:3px;
+  max-width:110px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hero-stat span { color:var(--dim); font-size:11px; }
+.step-card {
+  position:relative;
+  padding:20px;
+  margin-bottom:14px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:rgba(26,33,48,.86);
+  box-shadow:0 14px 38px rgba(0,0,0,.12);
+}
+[data-theme="light"] .step-card { background:rgba(255,255,255,.88); }
+.step-head {
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:16px;
+}
+.step-no {
+  width:30px;
+  height:30px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(217,119,6,.12);
+  color:var(--amber);
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  font-weight:700;
+  flex-shrink:0;
+}
+.step-title { color:var(--text); font-weight:700; margin-bottom:3px; }
+.step-desc { color:var(--muted); font-size:12px; line-height:1.5; }
+.field-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; }
+.quick-list { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.quick-chip {
+  max-width:190px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  border:1px solid rgba(217,119,6,.18);
+  border-radius:999px;
+  background:rgba(217,119,6,.07);
+  color:var(--amber);
+  cursor:pointer;
+  padding:5px 10px;
+  font:600 11px/1.3 inherit;
+  transition:background .15s, border-color .15s, transform .15s;
+}
+.quick-chip:hover { background:rgba(217,119,6,.12); border-color:rgba(217,119,6,.35); transform:translateY(-1px); }
+.settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.action-bar {
+  position:sticky;
+  bottom:0;
+  z-index:60;
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) auto;
+  gap:14px;
+  align-items:end;
+  padding:14px;
+  margin-top:18px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter:blur(18px);
+  box-shadow:0 -12px 34px rgba(0,0,0,.18);
+}
+.action-buttons { display:flex; align-items:center; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+.check-label { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; color:var(--muted); min-height:38px; }
+.mini-hero {
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:18px;
+  padding:22px;
+  margin-bottom:16px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:linear-gradient(135deg, rgba(217,119,6,.10), transparent 42%), var(--card);
+}
+.mini-hero h1 {
+  font-family:'Noto Serif SC',serif;
+  font-size:24px;
+  line-height:1.2;
+  font-weight:500;
+  color:var(--text);
+  margin-bottom:6px;
+}
+.mini-hero p { color:var(--muted); line-height:1.65; }
+.mini-hero-badge {
+  flex-shrink:0;
+  padding:8px 12px;
+  border:1px solid rgba(217,119,6,.18);
+  border-radius:999px;
+  background:rgba(217,119,6,.08);
+  color:var(--amber);
+  font-size:12px;
+  font-weight:700;
+}
+.tool-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.tool-actions-end { justify-content:flex-end; }
+.wide-page { max-width:1040px; }
+.editor-grid { display:grid; grid-template-columns:260px minmax(0,1fr); gap:12px; align-items:start; margin-bottom:12px; }
+.two-col-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
+.span-all { grid-column:1 / -1; }
+.kw-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  padding:3px 6px 3px 10px;
+  border-radius:999px;
+  font-size:12px;
+  max-width:220px;
+}
+.kw-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.kw-chip-hard { background:rgba(217,119,6,.12); border:1px solid rgba(217,119,6,.3); color:#d97706; }
+.kw-chip-soft { background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.25); color:#818cf8; }
+.icon-btn {
+  background:none;
+  border:none;
+  cursor:pointer;
+  color:var(--muted);
+  padding:0 4px;
+  font-size:15px;
+  line-height:1;
+  flex-shrink:0;
+  border-radius:5px;
+}
+.icon-btn:hover { color:var(--amber); background:rgba(217,119,6,.08); }
+.config-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.config-path {
+  flex:1;
+  min-width:0;
+  font-size:11px;
+  color:var(--muted);
+  background:rgba(255,255,255,.04);
+  padding:6px 10px;
+  border-radius:6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.status-bar {
+  flex-shrink:0;
+  height:36px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 14px;
+  background:var(--panel);
+  border-top:1px solid var(--border);
+  font-size:11px;
+}
+.status-link {
+  padding:3px 8px;
+  border-radius:5px;
+  background:none;
+  border:none;
+  cursor:pointer;
+  color:var(--muted);
+  transition:color .15s, background .15s;
+  font-family:inherit;
+  font-size:11px;
+}
+.status-link:hover { color:var(--amber); background:rgba(217,119,6,.08); }
+.btn:focus-visible,
+.inp:focus-visible,
+.nav-item:focus-visible,
+.quick-chip:focus-visible,
+.theme-toggle:focus-visible,
+.icon-btn:focus-visible,
+.status-link:focus-visible {
+  outline:2px solid var(--amber);
+  outline-offset:2px;
+}
+@media (max-width: 860px) {
+  .app-body { height:auto; min-height:100vh; overflow:auto; }
+  .app-layout { flex-direction:column; overflow:visible; }
+  .app-sidebar { width:100%; display:flex; overflow-x:auto; overflow-y:hidden; padding:8px; border-right:0; border-bottom:1px solid var(--border); }
+  .app-sidebar > template, .app-sidebar > div { flex-shrink:0; }
+  .nav-separator { display:none; }
+  .nav-item { min-width:max-content; border-radius:999px; }
+  .app-main { overflow:visible; }
+  .page-wrap { padding:22px 16px 110px; }
+  .page-hero { grid-template-columns:1fr; padding:22px; }
+  .hero-title { font-size:25px; }
+  .hero-stats { min-width:0; grid-template-columns:repeat(3, 1fr); }
+  .field-row, .settings-grid, .action-bar { grid-template-columns:1fr; }
+  .editor-grid, .two-col-grid { grid-template-columns:1fr; }
+  .span-all { grid-column:auto; }
+  .mini-hero { align-items:flex-start; flex-direction:column; }
+  .action-buttons { justify-content:stretch; }
+  .action-buttons .btn { flex:1; }
+}
 </style>
 <script>tailwind.config = { darkMode: 'class' }</script>
 </head>
 
-<body class="dark"
-      style="display:flex; flex-direction:column; height:100vh; overflow:hidden;"
+<body class="dark app-body"
       x-data="app()" x-init="init()" x-cloak>
 
 <!-- ══ Header ════════════════════════════════════════════════ -->
-<header style="flex-shrink:0; height:48px; display:flex; align-items:center; padding:0 20px;
-               gap:14px; background:var(--panel); border-bottom:1px solid var(--border);">
+<header class="app-header">
   <div style="display:flex; align-items:center; gap:10px;">
-    <div style="width:28px; height:28px; border-radius:7px; display:flex; align-items:center;
-                justify-content:center; font-size:15px;
-                background:linear-gradient(135deg,#d97706,#b45309);
-                box-shadow:0 2px 12px rgba(217,119,6,.3);">📚</div>
+    <div class="brand-mark" aria-hidden="true">📚</div>
     <span style="font-weight:600; color:var(--text); letter-spacing:-.01em;">TXT → EPUB</span>
     <span style="font-size:10px; padding:2px 7px; border-radius:5px;
                  background:rgba(217,119,6,.1); color:#d97706; font-weight:600;">v2.14</span>
   </div>
   <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
     <button @click="toggleTheme()"
+            class="theme-toggle"
             :title="theme==='dark'?'切换到日间模式':'切换到夜间模式'"
-            style="background:none; border:none; cursor:pointer; font-size:16px;
-                   padding:4px 6px; border-radius:6px; transition:background .15s; line-height:1;"
-            onmouseover="this.style.background='rgba(128,128,128,.12)'"
-            onmouseout="this.style.background='none'"
+            :aria-label="theme==='dark'?'切换到日间模式':'切换到夜间模式'"
             x-text="theme==='dark'?'☀️':'🌙'"></button>
     <div class="dot" :class="working?'dot-busy':statusOk?'dot-ok':'dot-err'"></div>
     <span style="font-size:12px; color:var(--muted);" x-text="status"></span>
@@ -345,21 +695,22 @@ tr:hover td { background: rgba(255,255,255,.015); }
 </header>
 
 <!-- ══ Body ══════════════════════════════════════════════════ -->
-<div style="display:flex; flex:1; overflow:hidden;">
+<div class="app-layout">
 
   <!-- Sidebar -->
-  <aside style="flex-shrink:0; width:192px; background:var(--panel);
-                border-right:1px solid var(--border); padding:8px 0;">
+  <aside class="app-sidebar" aria-label="工具导航">
     <template x-for="item in navItems" :key="item.id">
       <div>
         <div x-show="item.separator"
-             style="margin:10px 0 2px; padding:5px 16px 3px;
-                    font-size:10px; font-weight:600; letter-spacing:.08em;
-                    color:var(--muted); text-transform:uppercase;
-                    border-top:1px solid var(--border);"
+             class="nav-separator"
              x-text="item.label"></div>
         <div x-show="!item.separator"
-             class="nav-item" :class="page===item.id?'nav-active':''" @click="page=item.id">
+             class="nav-item" :class="page===item.id?'nav-active':''"
+             role="button" tabindex="0"
+             :aria-current="page===item.id?'page':false"
+             @click="page=item.id"
+             @keydown.enter.prevent="page=item.id"
+             @keydown.space.prevent="page=item.id">
           <span style="font-size:15px; width:20px; text-align:center; flex-shrink:0;"
                 x-text="item.icon"></span>
           <span x-text="item.label"></span>
@@ -372,44 +723,45 @@ tr:hover td { background: rgba(255,255,255,.015); }
   </aside>
 
   <!-- Main -->
-  <main style="flex:1; overflow-y:auto; background:var(--ink);">
+  <main class="app-main">
 
     <!-- ── 批量转换 ──────────────────────────────────── -->
-    <div x-show="page==='batch'" x-data="batchPanel()" class="page"
-         style="max-width:620px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">批量转换</h1>
-        <p class="c-muted">批量转换文件夹内的所有 TXT 文件</p>
-      </div>
+    <div x-show="page==='batch'" x-data="batchPanel()" class="page page-wrap">
+      <section class="mini-hero" aria-labelledby="batch-title">
+        <div>
+          <h1 id="batch-title">批量转换</h1>
+          <p>批量清洗并转换文件夹内的所有 TXT 文件，适合整理整套书库。</p>
+        </div>
+        <div class="mini-hero-badge" x-text="batchResults.length ? `${batchResults.filter(r=>!r.error).length}/${batchResults.length} 成功` : '批处理'">批处理</div>
+      </section>
 
-      <div class="card" class="mb3">
-        <span class="lbl">文件夹路径</span>
-        <div class="row8">
+      <section class="step-card" aria-labelledby="batch-step-dir">
+        <div class="step-head">
+          <div class="step-no">01</div>
+          <div>
+            <div id="batch-step-dir" class="step-title">选择输入文件夹</div>
+            <div class="step-desc">目录内的 TXT 文件会按当前广告过滤设置批量处理。</div>
+          </div>
+        </div>
+        <div class="field-row">
           <input class="inp" type="text" x-model="batchDir" placeholder="/Users/…/novels/">
-          <button class="btn btn-ghost" @click="browseDir()">浏览</button>
+          <button class="btn btn-ghost" @click="browseDir()" aria-label="浏览批量转换文件夹">浏览</button>
         </div>
         <div x-show="recentDirs.length"
-             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+             class="quick-list">
           <span style="font-size:11px; color:var(--dim);">最近:</span>
           <template x-for="d in recentDirs.slice(0,4)" :key="d">
             <button @click="batchDir=d"
-                    style="font-size:11px; color:#d97706; background:none; border:none;
-                           cursor:pointer; padding:0; max-width:200px; overflow:hidden;
-                           text-overflow:ellipsis; white-space:nowrap;
-                           transition:color .15s; font-family:inherit;"
-                    onmouseover="this.style.color='#f59e0b'"
-                    onmouseout="this.style.color='#d97706'"
+                    class="quick-chip"
                     x-text="basename(d)"></button>
           </template>
         </div>
-      </div>
+      </section>
 
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
-        <label style="display:flex; align-items:center; gap:8px;
-                      cursor:pointer; user-select:none; color:var(--muted);">
+      <div class="step-card" style="display:flex; align-items:center; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
+        <label class="check-label">
           <input type="checkbox" x-model="filterAds"
-                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
+                 style="width:16px; height:16px; accent-color:#d97706; cursor:pointer;">
           过滤广告行
         </label>
         <button class="btn btn-amber" style="margin-left:auto;" @click="doBatch()" :disabled="batchWorking||!batchDir">
@@ -462,45 +814,65 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── 生成 EPUB ──────────────────────────────────── -->
-    <div x-show="page==='epub'" class="page"
-         style="max-width:620px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">TXT → EPUB</h1>
-        <p class="c-muted">清洗 TXT、编辑章节、配置封面，一键生成精排 EPUB</p>
-      </div>
+    <div x-show="page==='epub'" class="page page-wrap">
+      <section class="page-hero" aria-labelledby="epub-page-title">
+        <div>
+          <div class="hero-kicker">BOOK CRAFTER WORKFLOW</div>
+          <h1 id="epub-page-title" class="hero-title">TXT → EPUB</h1>
+          <p class="hero-desc">清洗 TXT、校准章节、配置封面与排版，一键生成适合阅读器的精排 EPUB。</p>
+        </div>
+        <div class="hero-stats" aria-label="当前转换状态">
+          <div class="hero-stat">
+            <strong x-text="epubPath ? basename(epubPath) : '未选择'"></strong>
+            <span>当前文件</span>
+          </div>
+          <div class="hero-stat">
+            <strong x-text="$store.catalog.stats.total_chapters || '—'"></strong>
+            <span>章节数</span>
+          </div>
+          <div class="hero-stat">
+            <strong x-text="outputPath ? '已输出' : (working ? '处理中' : '待生成')"></strong>
+            <span>输出状态</span>
+          </div>
+        </div>
+      </section>
 
-      <div class="card" class="mb3">
-        <span class="lbl">TXT 文件</span>
-        <div class="row8">
+      <section class="step-card" aria-labelledby="epub-step-file">
+        <div class="step-head">
+          <div class="step-no">01</div>
+          <div>
+            <div id="epub-step-file" class="step-title">选择 TXT 文件</div>
+            <div class="step-desc">选择原始 TXT 后会自动识别书名、作者并分析章节目录。</div>
+          </div>
+        </div>
+        <div class="field-row">
           <input class="inp" type="text" x-model="epubPath"
                  placeholder="/Users/…/novel.txt"
                  @change="onEpubFileChange()">
-          <button class="btn btn-ghost" @click="browseFile('epub')">浏览</button>
+          <button class="btn btn-ghost" @click="browseFile('epub')" aria-label="浏览 TXT 文件">浏览</button>
         </div>
         <div x-show="recentFiles.length"
-             style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+             class="quick-list">
           <span style="font-size:11px; color:var(--dim);">最近:</span>
           <template x-for="f in recentFiles.slice(0,5)" :key="f">
             <button @click="epubPath=f; onEpubFileChange()"
-                    style="font-size:11px; color:#d97706; background:none; border:none;
-                           cursor:pointer; padding:0; max-width:180px; overflow:hidden;
-                           text-overflow:ellipsis; white-space:nowrap;
-                           transition:color .15s; font-family:inherit;"
-                    onmouseover="this.style.color='#f59e0b'"
-                    onmouseout="this.style.color='#d97706'"
+                    class="quick-chip"
                     x-text="basename(f)"></button>
           </template>
         </div>
-      </div>
+      </section>
 
       <!-- ── 章节编辑 ──────────────────────────────────── -->
-      <div x-show="$store.catalog.working || $store.catalog.chapters.length > 0"
-           class="mb3">
+      <section x-show="$store.catalog.working || $store.catalog.chapters.length > 0"
+           class="step-card" aria-labelledby="epub-step-chapters">
         <!-- 折叠头 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:12px;">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="lbl m0">章节编辑</span>
+            <span class="step-no">02</span>
+            <div>
+              <span id="epub-step-chapters" class="step-title">确认章节目录</span>
+              <div class="step-desc">支持拖拽重排、编辑章节号与标题，修改后再生成 EPUB。</div>
+            </div>
             <span x-show="$store.catalog.stats.total_chapters > 0"
                   style="font-size:11px; padding:1px 8px; border-radius:99px;
                          background:rgba(217,119,6,.1); color:#d97706;"
@@ -610,12 +982,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </div>
           </div>
         </div>
-      </div>
+      </section>
       <!-- ── /章节编辑 ─────────────────────────────────── -->
 
-      <div class="card" class="mb3">
-        <span class="lbl">书籍信息</span>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <section class="step-card" aria-labelledby="epub-step-meta">
+        <div class="step-head">
+          <div class="step-no">03</div>
+          <div>
+            <div id="epub-step-meta" class="step-title">确认书籍信息</div>
+            <div class="step-desc">自动识别结果可直接使用，也可以手动覆盖书名与作者。</div>
+          </div>
+        </div>
+        <div class="settings-grid">
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
               <div class="sublbl m0">书名</div>
@@ -637,10 +1015,16 @@ tr:hover td { background: rgba(255,255,255,.015); }
                    placeholder="留空自动识别" @input="epubAuthorEdited=true">
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="card" style="margin-bottom:16px;">
-        <span class="lbl">封面选项</span>
+      <section class="step-card" aria-labelledby="epub-step-cover">
+        <div class="step-head">
+          <div class="step-no">04</div>
+          <div>
+            <div id="epub-step-cover" class="step-title">封面选项</div>
+            <div class="step-desc">可选择无封面、本地图片、URL、自动搜索或自动生成封面。</div>
+          </div>
+        </div>
         <div style="display:flex; flex-wrap:wrap; gap:18px; margin-bottom:12px;">
           <template x-for="opt in coverOptions" :key="opt.value">
             <label style="display:flex; align-items:center; gap:7px;
@@ -762,13 +1146,19 @@ tr:hover td { background: rgba(255,255,255,.015); }
           </div>
         </div>
 
-      </div><!-- /封面选项 card -->
+      </section><!-- /封面选项 -->
 
       <!-- 排版样式（可折叠） -->
-      <div class="card" style="margin-bottom:16px;">
+      <section class="step-card" aria-labelledby="epub-step-style">
         <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
              @click="epubStyleOpen=!epubStyleOpen">
-          <span class="lbl m0">排版样式</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="step-no">05</div>
+            <div>
+              <div id="epub-step-style" class="step-title">排版样式</div>
+              <div class="step-desc">调整页面边距、行间距、首行缩进和章节标题样式，右侧可实时预览。</div>
+            </div>
+          </div>
           <span style="font-size:11px; color:var(--dim);"
                 x-text="epubStyleOpen?'收起 ▲':'展开 ▼'"></span>
         </div>
@@ -862,63 +1252,71 @@ tr:hover td { background: rgba(255,255,255,.015); }
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="mb3">
-        <span class="lbl">输出目录（可选）</span>
-        <div class="sublbl" style="margin-bottom:4px;">留空则写到输入文件同目录</div>
-        <div class="row8">
-          <input class="inp" type="text" x-model="epubOutputDir"
-                 placeholder="~/Books/epub-library" class="f1">
-          <button class="btn btn-ghost" @click="browseDir('epub-output-dir')">选择目录</button>
+      <div class="action-bar" aria-label="生成操作区">
+        <div>
+          <span class="lbl">输出目录（可选）</span>
+          <div class="sublbl" style="margin-bottom:6px;">留空则写到输入文件同目录</div>
+          <div class="field-row">
+            <input class="inp" type="text" x-model="epubOutputDir"
+                   placeholder="~/Books/epub-library" class="f1">
+            <button class="btn btn-ghost" @click="browseDir('epub-output-dir')" aria-label="选择 EPUB 输出目录">选择目录</button>
+          </div>
         </div>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:10px; justify-content:flex-end;">
-        <label style="display:flex; align-items:center; gap:8px;
-                      cursor:pointer; user-select:none; color:var(--muted);">
-          <input type="checkbox" x-model="filterAds"
-                 style="width:14px; height:14px; accent-color:#d97706; cursor:pointer;">
-          过滤广告行
-        </label>
-        <button class="btn btn-ghost" @click="doTxtOnly()"
-                :disabled="epubTxtOnlyWorking||epubWorking||!epubPath">
-          <span x-show="epubTxtOnlyWorking" class="spin"></span>
-          <span x-text="epubTxtOnlyWorking?'转换中…':'🔧  仅清洗 TXT'"></span>
-        </button>
-        <button class="btn btn-amber" @click="doEpub()"
-                :disabled="epubWorking||coverSearching||!epubPath">
-          <span x-show="epubWorking||coverSearching" class="spin"></span>
-          <span x-text="coverSearching?'搜索封面…':epubWorking?'生成中…':'🚀  一键生成 EPUB'"></span>
-        </button>
+        <div class="action-buttons">
+          <label class="check-label">
+            <input type="checkbox" x-model="filterAds"
+                   style="width:16px; height:16px; accent-color:#d97706; cursor:pointer;">
+            过滤广告行
+          </label>
+          <button class="btn btn-ghost" @click="doTxtOnly()"
+                  :disabled="epubTxtOnlyWorking||epubWorking||!epubPath">
+            <span x-show="epubTxtOnlyWorking" class="spin"></span>
+            <span x-text="epubTxtOnlyWorking?'转换中…':'🔧  仅清洗 TXT'"></span>
+          </button>
+          <button class="btn btn-amber" @click="doEpub()"
+                  :disabled="epubWorking||coverSearching||!epubPath">
+            <span x-show="epubWorking||coverSearching" class="spin"></span>
+            <span x-text="coverSearching?'搜索封面…':epubWorking?'生成中…':'🚀  一键生成 EPUB'"></span>
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- ── 目录查看 ───────────────────────────────────── -->
-    <div x-show="page==='catalog'" class="page"
-         style="max-width:740px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">目录编辑</h1>
-        <p class="c-muted">查看、编辑、重排章节，保存为新文件</p>
-      </div>
+    <div x-show="page==='catalog'" class="page page-wrap wide-page">
+      <section class="mini-hero" aria-labelledby="catalog-title">
+        <div>
+          <h1 id="catalog-title">目录编辑</h1>
+          <p>查看、编辑、拖拽重排章节，确认后保存为新的 TXT 文件。</p>
+        </div>
+        <div class="mini-hero-badge" x-show="$store.catalog.stats.total_chapters>0"
+             x-text="`${$store.catalog.stats.total_chapters} 章`"></div>
+      </section>
 
-      <div class="card" class="mb3">
-        <span class="lbl">TXT 文件</span>
-        <div class="row8">
+      <section class="step-card" aria-labelledby="catalog-step-file">
+        <div class="step-head">
+          <div class="step-no">01</div>
+          <div>
+            <div id="catalog-step-file" class="step-title">加载 TXT 文件</div>
+            <div class="step-desc">加载后可编辑章节号、标题，并通过拖拽调整顺序。</div>
+          </div>
+        </div>
+        <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto;">
           <input class="inp" type="text" x-model="$store.catalog.path"
                  placeholder="/Users/…/novel.txt" @keydown.enter="doLoadCatalog()">
-          <button class="btn btn-ghost" @click="browseFile('catalog')">浏览</button>
+          <button class="btn btn-ghost" @click="browseFile('catalog')" aria-label="浏览目录编辑 TXT 文件">浏览</button>
           <button class="btn btn-amber" @click="doLoadCatalog()"
                   :disabled="$store.catalog.working||!$store.catalog.path">
             <span x-show="$store.catalog.working" class="spin"></span>
             <span x-text="$store.catalog.working?'加载中…':'加载'"></span>
           </button>
         </div>
-      </div>
+      </section>
 
       <div x-show="$store.catalog.stats.total_chapters>0"
-           class="sublbl" class="mb3">
+           class="sublbl mb3">
         <span x-text="$store.catalog.stats.total_chapters"></span> 章 &nbsp;·&nbsp;
         <span x-text="($store.catalog.stats.total_lines||0).toLocaleString()"></span> 行 &nbsp;·&nbsp;
         <span x-text="($store.catalog.stats.total_chars||0).toLocaleString()"></span> 字
@@ -1019,19 +1417,27 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── 广告规则 ──────────────────────────────────── -->
-    <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page"
+    <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page page-wrap"
          x-init="$watch('$store.catalog.filePath', v => { if(v && !adScanPath) adScanPath=v })"
-         style="max-width:640px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">广告过滤规则</h1>
-        <p class="c-muted">配置关键词列表与匹配分值阈值，设置全局生效</p>
-      </div>
+         style="max-width:760px;">
+      <section class="mini-hero" aria-labelledby="adfilter-title">
+        <div>
+          <h1 id="adfilter-title">广告扫描</h1>
+          <p>预览并删除广告行，维护强匹配/软匹配关键词和全局过滤阈值。</p>
+        </div>
+        <div class="mini-hero-badge" x-text="adRulesDirty ? '有未保存修改' : '规则已同步'"></div>
+      </section>
 
       <!-- 广告扫描 -->
-      <div class="card" class="mb3">
-        <span class="lbl">扫描广告（预览，不删除）</span>
-        <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <section class="step-card" aria-labelledby="ad-scan-title">
+        <div class="step-head">
+          <div class="step-no">01</div>
+          <div>
+            <div id="ad-scan-title" class="step-title">扫描广告（预览，不删除）</div>
+            <div class="step-desc">扫描后可选择高置信行并生成删除广告后的新文件。</div>
+          </div>
+        </div>
+        <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto; margin-bottom:10px;">
           <input class="inp" type="text" x-model="adScanPath"
                  placeholder="/Users/…/novel.txt"
                  @keydown.enter="doAdScan()">
@@ -1123,25 +1529,21 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
                   @click="openFile(adDeleteOutput)">在 Finder 中显示</button>
         </div>
-      </div>
+      </section>
 
       <!-- 强匹配关键词 -->
-      <div class="card" class="mb3">
+      <div class="card mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
           <span class="lbl m0">强匹配关键词</span>
           <span class="sublbl m0">命中即视为广告（分值 ≥ 0.78）</span>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
           <template x-for="(kw, i) in adHardKw" :key="i">
-            <div style="display:inline-flex; align-items:center; gap:3px;
-                        padding:3px 6px 3px 10px;
-                        background:rgba(217,119,6,.12); border:1px solid rgba(217,119,6,.3);
-                        border-radius:99px; font-size:12px; color:#d97706; max-width:220px;">
-              <span x-text="kw" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+            <div class="kw-chip kw-chip-hard">
+              <span x-text="kw"></span>
               <button @click="adHardKw.splice(i,1); adRulesDirty=true"
-                      style="background:none; border:none; cursor:pointer; color:var(--muted);
-                             padding:0 2px; font-size:14px; line-height:1; flex-shrink:0;"
-                      title="删除">×</button>
+                      class="icon-btn"
+                      title="删除" aria-label="删除强匹配关键词">×</button>
             </div>
           </template>
           <span x-show="adHardKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
@@ -1154,22 +1556,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 软匹配关键词 -->
-      <div class="card" class="mb3">
+      <div class="card mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
           <span class="lbl m0">软匹配关键词</span>
           <span class="sublbl m0">每命中一条加 0.18 分</span>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; margin-bottom:10px;">
           <template x-for="(kw, i) in adSoftKw" :key="i">
-            <div style="display:inline-flex; align-items:center; gap:3px;
-                        padding:3px 6px 3px 10px;
-                        background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.25);
-                        border-radius:99px; font-size:12px; color:#818cf8; max-width:220px;">
-              <span x-text="kw" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+            <div class="kw-chip kw-chip-soft">
+              <span x-text="kw"></span>
               <button @click="adSoftKw.splice(i,1); adRulesDirty=true"
-                      style="background:none; border:none; cursor:pointer; color:var(--muted);
-                             padding:0 2px; font-size:14px; line-height:1; flex-shrink:0;"
-                      title="删除">×</button>
+                      class="icon-btn"
+                      title="删除" aria-label="删除软匹配关键词">×</button>
             </div>
           </template>
           <span x-show="adSoftKw.length===0" class="sublbl" style="margin:4px 0;">（空）</span>
@@ -1212,21 +1610,18 @@ tr:hover td { background: rgba(255,255,255,.015); }
       <!-- 配置文件 -->
       <div class="card" style="margin-top:14px;">
         <span class="lbl">配置文件</span>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <code style="flex:1; font-size:11px; color:var(--muted); background:rgba(255,255,255,.04);
-                       padding:6px 10px; border-radius:6px; overflow:hidden; text-overflow:ellipsis;
-                       white-space:nowrap; min-width:0;"
-                x-text="adRulesFilePath||'（尚未保存）'"></code>
+        <div class="config-row">
+          <code class="config-path" x-text="adRulesFilePath||'（尚未保存）'"></code>
           <button class="btn btn-ghost"
                   @click="post('/api/open-in-finder',{path:adRulesFilePath})"
                   :disabled="!adRulesFilePath"
-                  title="在 Finder 中显示">📁 显示</button>
+                  title="在 Finder 中显示" aria-label="在 Finder 中显示广告规则配置文件">📁 显示</button>
           <button class="btn btn-ghost"
                   @click="post('/api/open-file',{path:adRulesFilePath})"
                   :disabled="!adRulesFilePath"
-                  title="用默认编辑器打开">✏️ 编辑</button>
+                  title="用默认编辑器打开" aria-label="编辑广告规则配置文件">✏️ 编辑</button>
           <button class="btn btn-ghost" @click="loadAdRules()"
-                  title="从文件重新加载（外部编辑后使用）">↺ 重新加载</button>
+                  title="从文件重新加载（外部编辑后使用）" aria-label="重新加载广告规则配置文件">↺ 重新加载</button>
         </div>
         <p style="margin-top:8px; font-size:11px; color:var(--dim); line-height:1.5;">
           保存后生成标准 JSON 文件，可直接用文本编辑器修改，修改后点「重新加载」生效。
@@ -1235,18 +1630,23 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── 章节规则 ──────────────────────────────────── -->
-    <div x-show="page==='chapterRules'" x-data="chapterRulesPanel()" class="page"
-         style="max-width:640px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">章节识别规则</h1>
-        <p class="c-muted">自定义正则规则优先于内置规则匹配，全局生效</p>
-      </div>
+    <div x-show="page==='chapterRules'" x-data="chapterRulesPanel()" class="page page-wrap"
+         style="max-width:760px;">
+      <section class="mini-hero" aria-labelledby="chapter-rules-title">
+        <div>
+          <h1 id="chapter-rules-title">章节识别规则</h1>
+          <p>自定义正则规则优先于内置规则匹配，用于适配特殊章节标题格式。</p>
+        </div>
+        <div class="mini-hero-badge" x-text="chapterRulesDirty ? '有未保存修改' : '规则已同步'"></div>
+      </section>
 
       <!-- 自定义规则列表 -->
-      <div class="card" class="mb3">
+      <section class="step-card" aria-labelledby="chapter-custom-title">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <span class="lbl m0">自定义规则</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="step-no">01</div>
+            <div id="chapter-custom-title" class="step-title">自定义规则</div>
+          </div>
           <span class="sublbl m0">优先于内置规则</span>
         </div>
 
@@ -1261,9 +1661,8 @@ tr:hover td { background: rgba(255,255,255,.015); }
                            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                     x-text="rule.pattern"></code>
               <button @click="removeChapterPattern(i)"
-                      style="background:none; border:none; cursor:pointer; color:var(--muted);
-                             padding:0 4px; font-size:15px; line-height:1; flex-shrink:0;"
-                      title="删除">×</button>
+                      class="icon-btn"
+                      title="删除" aria-label="删除章节识别规则">×</button>
             </div>
           </template>
           <span x-show="chapterPatterns.length===0" class="sublbl" style="margin:4px 0;">
@@ -1278,11 +1677,11 @@ tr:hover td { background: rgba(255,255,255,.015); }
                  @keydown.enter="addChapterPattern()">
           <button class="btn btn-ghost" @click="addChapterPattern()">添加</button>
         </div>
-      </div>
+      </section>
 
       <!-- 保存按钮 -->
       <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:12px;">
-        <button class="btn btn-ghost" @click="loadChapterRules()" title="从文件重新加载">↺ 重新加载</button>
+        <button class="btn btn-ghost" @click="loadChapterRules()" title="从文件重新加载" aria-label="重新加载章节识别规则">↺ 重新加载</button>
         <button class="btn btn-amber" @click="saveChapterRules()" :disabled="chapterRulesSaving||!chapterRulesDirty">
           <span x-show="chapterRulesSaving" class="spin"></span>
           <span x-text="chapterRulesSaving?'保存中…':'保存'"></span>
@@ -1290,7 +1689,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 说明 + 示例 -->
-      <div class="card" class="mb3">
+      <div class="card mb3">
         <span class="lbl">写法说明</span>
         <p style="font-size:12px; color:var(--muted); line-height:1.8; margin-bottom:10px;">
           正则须包含 <strong>两个捕获组</strong>：第 1 组匹配章节号，第 2 组匹配标题（可用 <code style="color:var(--text);">(.*)</code> 表示可为空）。
@@ -1320,7 +1719,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
       </div>
 
       <!-- 内置默认规则（折叠） -->
-      <div class="card" class="mb3">
+      <div class="card mb3">
         <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
              @click="chapterDefaultsOpen=!chapterDefaultsOpen">
           <span class="lbl m0">内置默认规则</span>
@@ -1340,19 +1739,16 @@ tr:hover td { background: rgba(255,255,255,.015); }
       <!-- 配置文件 -->
       <div class="card">
         <span class="lbl">配置文件</span>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <code style="flex:1; font-size:11px; color:var(--muted); background:rgba(255,255,255,.04);
-                       padding:6px 10px; border-radius:6px; overflow:hidden; text-overflow:ellipsis;
-                       white-space:nowrap; min-width:0;"
-                x-text="chapterRulesFilePath||'（尚未保存）'"></code>
+        <div class="config-row">
+          <code class="config-path" x-text="chapterRulesFilePath||'（尚未保存）'"></code>
           <button class="btn btn-ghost"
                   @click="post('/api/open-in-finder',{path:chapterRulesFilePath})"
                   :disabled="!chapterRulesFilePath"
-                  title="在 Finder 中显示">📁 显示</button>
+                  title="在 Finder 中显示" aria-label="在 Finder 中显示章节规则配置文件">📁 显示</button>
           <button class="btn btn-ghost"
                   @click="post('/api/open-file',{path:chapterRulesFilePath})"
                   :disabled="!chapterRulesFilePath"
-                  title="用默认编辑器打开">✏️ 编辑</button>
+                  title="用默认编辑器打开" aria-label="编辑章节规则配置文件">✏️ 编辑</button>
         </div>
         <p style="margin-top:8px; font-size:11px; color:var(--dim); line-height:1.5;">
           保存后生成标准 JSON 文件，可直接用文本编辑器修改，修改后点「重新加载」生效。
@@ -1361,21 +1757,28 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- ── EPUB 编辑器 ────────────────────────────── -->
-    <div x-show="page==='editor'" x-data="editorPanel()" class="page"
-         style="max-width:960px; margin:0 auto; padding:32px 24px;">
-      <div class="mb6">
-        <h1 style="font-family:'Noto Serif SC',serif; font-size:18px; font-weight:500;
-                   color:var(--text); margin-bottom:4px;">EPUB 编辑器</h1>
-        <p class="c-muted">加载 .epub 或 .txt 文件，编辑章节内容后一键重建为 EPUB</p>
-      </div>
+    <div x-show="page==='editor'" x-data="editorPanel()" class="page page-wrap wide-page">
+      <section class="mini-hero" aria-labelledby="editor-title">
+        <div>
+          <h1 id="editor-title">EPUB 编辑器</h1>
+          <p>加载 .epub 或 .txt 文件，编辑章节正文、元数据，完成后一键重建为 EPUB。</p>
+        </div>
+        <div class="mini-hero-badge" x-text="editorLoaded ? `${editorChapters.length} 章` : '编辑会话'"></div>
+      </section>
 
       <!-- 加载文件 -->
-      <div class="card" class="mb3">
-        <span class="lbl">加载文件</span>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <section class="step-card" aria-labelledby="editor-load-title">
+        <div class="step-head">
+          <div class="step-no">01</div>
+          <div>
+            <div id="editor-load-title" class="step-title">加载文件</div>
+            <div class="step-desc">支持 EPUB 或 TXT；加载后可逐章编辑、查找替换和重建输出。</div>
+          </div>
+        </div>
+        <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto; margin-bottom:8px;">
           <input class="inp" type="text" x-model="editorPath"
                  placeholder="选择 .epub 或 .txt 文件…" readonly class="f1">
-          <button class="btn btn-ghost" @click="editorBrowse()">浏览…</button>
+          <button class="btn btn-ghost" @click="editorBrowse()" aria-label="浏览 EPUB 编辑器文件">浏览…</button>
           <button class="btn btn-amber" @click="editorLoad()"
                   :disabled="!editorPath||editorWorking">
             <span x-show="editorWorking" class="spin"></span>
@@ -1394,12 +1797,11 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <button class="btn btn-ghost" style="font-size:11px; padding:3px 9px;"
                   @click="editorRestoreSession()">↺ 恢复会话</button>
         </div>
-      </div>
+      </section>
 
       <div x-show="editorLoaded">
         <!-- 章节列表 + 编辑区 -->
-        <div style="display:grid; grid-template-columns:260px 1fr; gap:12px;
-                    align-items:start; margin-bottom:12px;">
+        <div class="editor-grid">
 
           <!-- 章节列表 -->
           <div class="card" style="padding:0; overflow:hidden;">
@@ -1473,14 +1875,15 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
 
         <!-- 查找 / 替换 -->
-        <div class="card" class="mb3">
+        <div class="card mb3">
           <span class="lbl">查找 / 替换</span>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+          <div class="two-col-grid" style="margin-bottom:8px;">
             <div style="display:flex; gap:6px;">
               <input class="inp" type="text" x-model="editorFindQuery"
                      placeholder="查找关键词…" class="f1"
                      @keydown.enter="editorFind()">
               <button class="btn btn-ghost" @click="editorFind()"
+                      aria-label="查找关键词"
                       :disabled="editorFindWorking||!editorFindQuery">
                 <span x-show="editorFindWorking" class="spin"></span>🔍
               </button>
@@ -1519,7 +1922,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
 
         <!-- 元数据编辑 -->
-        <div class="card" class="mb3">
+        <div class="card mb3">
           <div style="display:flex; align-items:center; justify-content:space-between;
                       cursor:pointer;" @click="editorMetaOpen=!editorMetaOpen">
             <span class="lbl m0">书籍元数据</span>
@@ -1527,7 +1930,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                   x-text="editorMetaOpen?'▲ 收起':'▼ 展开'"></span>
           </div>
           <div x-show="editorMetaOpen"
-               style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+               class="two-col-grid" style="margin-top:12px;">
             <div>
               <div class="sublbl">书名</div>
               <input class="inp" type="text" x-model="editorTitle">
@@ -1544,12 +1947,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
               <div class="sublbl">出版日期</div>
               <input class="inp" type="text" x-model="editorPubdate" placeholder="2024-01-01">
             </div>
-            <div style="grid-column:span 2;">
+            <div class="span-all">
               <div class="sublbl">简介</div>
               <textarea class="inp" x-model="editorDescription" rows="3"
                         style="resize:vertical;"></textarea>
             </div>
-            <div style="grid-column:span 2; display:flex; justify-content:flex-end;">
+            <div class="span-all" style="display:flex; justify-content:flex-end;">
               <button class="btn btn-amber" @click="editorSaveMeta()"
                       :disabled="editorMetaSaving">
                 <span x-show="editorMetaSaving" class="spin"></span>更新元数据
@@ -1562,12 +1965,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <div class="card">
           <span class="lbl">重建 EPUB</span>
           <div class="sublbl">输出路径（留空则写入 ~/.txt2epub/output/）</div>
-          <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <div class="field-row" style="margin-bottom:8px;">
             <input class="inp" type="text" x-model="editorBuildOutput"
                    placeholder="~/.txt2epub/output/书名.epub" class="f1">
           </div>
           <div class="sublbl" style="margin-bottom:4px;">或指定输出目录，优先级低于上方完整路径</div>
-          <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div class="field-row" style="margin-bottom:12px;">
             <input class="inp" type="text" x-model="editorOutputDir"
                    placeholder="~/Books/epub-library" class="f1">
             <button class="btn btn-ghost" @click="browseDir('editor-output-dir')">选择目录</button>
@@ -1585,9 +1988,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
 </div>
 
 <!-- ══ Status bar ════════════════════════════════════════════ -->
-<div style="flex-shrink:0; height:36px; display:flex; align-items:center; gap:10px;
-            padding:0 14px; background:var(--panel); border-top:1px solid var(--border);
-            font-size:11px;">
+<div class="status-bar">
   <div style="width:72px; height:3px; background:rgba(255,255,255,.05); border-radius:99px;
               flex-shrink:0; overflow:hidden;">
     <div class="prog-bar"
@@ -1602,32 +2003,22 @@ tr:hover td { background: rgba(255,255,255,.015); }
         x-text="'/ '+basename(outputPath)"></span>
   <template x-if="outputPath">
     <div style="display:flex; gap:2px; flex-shrink:0;">
-      <button @click="openFile(outputPath)"
-              style="padding:3px 8px; border-radius:5px; background:none; border:none;
-                     cursor:pointer; color:var(--muted); transition:all .15s;
-                     font-family:inherit; font-size:11px;"
-              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">打开</button>
-      <button @click="openInFinder(outputPath)"
-              style="padding:3px 8px; border-radius:5px; background:none; border:none;
-                     cursor:pointer; color:var(--muted); transition:all .15s;
-                     font-family:inherit; font-size:11px;"
-              onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">Finder</button>
+      <button @click="openFile(outputPath)" class="status-link" aria-label="打开输出文件">打开</button>
+      <button @click="openInFinder(outputPath)" class="status-link" aria-label="在 Finder 中显示输出文件">Finder</button>
     </div>
   </template>
   <button @click="logVisible=!logVisible"
-          style="display:flex; align-items:center; gap:4px; padding:3px 8px; border-radius:5px;
-                 background:none; border:none; cursor:pointer; color:var(--dim);
-                 transition:color .15s; font-family:inherit; font-size:11px; flex-shrink:0;"
-          onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">
+          class="status-link"
+          style="display:flex; align-items:center; gap:4px; flex-shrink:0;"
+          :aria-label="logVisible?'隐藏日志':'显示日志'">
     <span>日志</span>
     <span style="font-size:9px;" x-text="logVisible?'▲':'▼'"></span>
   </button>
   <button x-show="logVisible" @click="logFullscreen=!logFullscreen"
           :title="logFullscreen?'收起':'全屏日志'"
-          style="display:flex; align-items:center; padding:3px 6px; border-radius:5px;
-                 background:none; border:none; cursor:pointer; color:var(--dim);
-                 transition:color .15s; font-family:inherit; font-size:11px; flex-shrink:0;"
-          onmouseover="this.style.color='#d97706'" onmouseout="this.style.color=''">
+          class="status-link"
+          style="display:flex; align-items:center; padding:3px 6px; flex-shrink:0;"
+          :aria-label="logFullscreen?'收起全屏日志':'打开全屏日志'">
     <span x-text="logFullscreen?'⊠':'⊞'" style="font-size:13px;"></span>
   </button>
 </div>
