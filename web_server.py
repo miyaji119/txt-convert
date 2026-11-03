@@ -438,7 +438,20 @@ async def api_catalog(req: PathReq):
 
     def _run():
         content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
-        return ChapterAnalyzer.analyze_chapter_structure(content)
+        structure = ChapterAnalyzer.analyze_chapter_structure(content)
+        # 提取第一章之前的简介/文案内容（去掉注释行和首尾空行）
+        description = ''
+        if structure['chapters']:
+            lines = content.split('\n')
+            first_start = structure['chapters'][0]['start_line'] - 1
+            intro = [l for l in lines[:first_start]
+                     if l.strip() and not l.strip().startswith('<!--')]
+            while intro and not intro[0].strip():
+                intro.pop(0)
+            while intro and not intro[-1].strip():
+                intro.pop()
+            description = '\n'.join(intro)
+        return {**structure, 'description': description}
 
     return await asyncio.to_thread(_run)
 
