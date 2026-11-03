@@ -4,6 +4,7 @@
 对每行打广告概率分（0–1），超过阈值或形成连续广告块的行被移除。
 """
 
+import html as _html
 import re
 from typing import List, Set, Tuple
 
@@ -42,6 +43,26 @@ class AdFilter:
         r'[\s,，。：:]*'
         r'[A-Za-z0-9]+(?:[.][A-Za-z0-9]+){1,3}'
         r'[^\n,，。！？]{0,30}',
+        re.I,
+    )
+
+    # 不可见字符、私用区码位等乱码噪声（几乎零误判，直接截除）
+    _NOISE_RE = re.compile(
+        r'[\u00a0\u00ad\u115f\u1160\u17b4\u17b5'  # NBSP / soft-hyphen / Hangul/Khmer filler
+        r'\u180b-\u180e'    # Mongolian format chars
+        r'\u200b-\u200f'    # zero-width sp / non-joiner / joiner / LRM / RLM
+        r'\u202a-\u202e'    # 双向文本方向控制符
+        r'\u2060-\u2064'    # word joiner 等
+        r'\u206a-\u206f'    # 已废弃格式控制符
+        r'\ufeff]+'         # BOM / ZWNBSP
+        r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+'  # C0 控制符（保留 \t \n）
+        r'|[\ue000-\uf8ff]+'   # BMP 私用区（PUA，平台水印常用）
+        r'|[\ufff9-\uffff]+'   # 行间注释符 + Specials
+    )
+    # HTML 标签残留（爬虫未完全剥离标记）
+    _HTML_TAG_RE = re.compile(
+        r'</?(?:br|p|div|span|font|b|i|u|s|em|strong|a|ul|ol|li'
+        r'|h[1-6]|table|tr|td|th|blockquote|pre|code)\b[^>]{0,80}/?>',
         re.I,
     )
 
@@ -107,6 +128,15 @@ class AdFilter:
         if cjk_before < 4:
             return line
         return line[:m.start()].rstrip('，, \t')
+
+    @classmethod
+    def _clean_noise(cls, line: str) -> str:
+        """去除行内不可见字符、HTML 残留、私用区码位等乱码噪声。"""
+        if '&' in line:
+            line = _html.unescape(line)
+        line = cls._HTML_TAG_RE.sub('', line)
+        line = cls._NOISE_RE.sub('', line)
+        return line
 
     @classmethod
     def _split_url_indices(cls, lines: list) -> set:
@@ -231,7 +261,13 @@ class AdFilter:
         lines = content.split('\n')
         n = len(lines)
 
-        # 先截除行内夹带的广告片段（正文+广告混合行 → 只保留正文部分）
+        # 先去除不可见字符、HTML 标签残留等乱码噪声
+        for i, line in enumerate(lines):
+            cleaned = cls._clean_noise(line)
+            if cleaned != line:
+                lines[i] = cleaned
+
+        # 截除行内夹带的广告片段（正文+广告混合行 → 只保留正文部分）
         for i, line in enumerate(lines):
             stripped = cls._strip_inline_ads(line)
             if stripped != line:
