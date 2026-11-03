@@ -1,3 +1,198 @@
+# v3.0 变更记录
+
+> **版本**: v3.0
+> **日期**: 2026-11-03
+> **变更范围**: Web UI 工具台重构、响应式与可访问性增强、EPUB 编辑器构建稳定性修复、文档与 standalone skill 同步
+
+---
+
+## 一、变更概览
+
+| 模块 | 内容 | 新增文件 | 修改文件 |
+|------|------|---------|---------|
+| Web UI | App Shell + Hero + Step Card 工具台视觉体系；多 Tab 统一布局；sticky 生成操作区 | — | `static/index.html` |
+| 响应式 | 小屏侧边栏横向滚动；表单、设置、EPUB 编辑器双列自动折叠 | — | `static/index.html` |
+| 可访问性 | 导航键盘切换；统一 focus ring；图标按钮 / 状态栏按钮补充 `aria-label` | — | `static/index.html` |
+| 组件化 | 抽取 quick chip、关键词 chip、配置文件行、状态栏、编辑器网格等 CSS 类 | — | `static/index.html` |
+| EPUB 编辑器 | `EditorBuildReq` 补齐 `chapter_title_align`，与主 EPUB 生成接口保持一致 | — | `web_server.py` |
+| 测试 | 新增编辑器构建请求模型回归测试 | — | `tests/test_api.py` |
+| 文档 | README / 设计文档更新到 v3.0；standalone skill 对齐 v3.0 能力基线 | — | `README.md`, `design-docs/txt-convert_DESIGN.md`, `.claude/agents/novel-epub-typeset-standalone.md` |
+
+---
+
+## 二、Web UI v3.0
+
+### 2.1 App Shell 与统一页面结构
+
+`static/index.html` 从功能堆叠型页面升级为工具台式结构：
+
+- 新增 `.app-body`、`.app-header`、`.app-layout`、`.app-sidebar`、`.app-main`
+- 顶部品牌区使用 `.brand-mark`，主题切换使用 `.theme-toggle`
+- 主内容区增加轻量径向渐变背景，提升层次但不引入新依赖
+- 主要页面统一为 `.page-wrap` + `.mini-hero`
+- `TXT → EPUB` 主流程使用更完整的 `.page-hero` + `.hero-stats`
+
+### 2.2 Hero + Step Card 流程化
+
+新增流程组件：
+
+| 类名 | 用途 |
+| ---- | ---- |
+| `.page-hero` / `.hero-stats` | `TXT → EPUB` 顶部状态总览：当前文件、章节数、输出状态 |
+| `.mini-hero` / `.mini-hero-badge` | 其他 Tab 标题与状态徽章 |
+| `.step-card` / `.step-no` | 步骤卡片，强化“下一步该做什么” |
+| `.action-bar` | `epub` 页底部 sticky 生成操作区 |
+
+`TXT → EPUB` 页面拆为：
+
+1. 选择 TXT 文件
+2. 确认章节目录
+3. 确认书籍信息
+4. 封面选项
+5. 排版样式
+
+底部 sticky action bar 集中放置：输出目录、广告过滤、仅清洗 TXT、一键生成 EPUB。
+
+### 2.3 多 Tab 统一
+
+- **批量转换**：Hero 徽章显示成功数 / 总数；最近目录改为 chip；批量处理结果表格保留错误摘要。
+- **目录编辑**：Hero 显示章节数；加载 TXT 改为 Step 入口；章节编辑、拖拽排序、保存逻辑不变。
+- **广告扫描**：Hero 显示规则同步状态；扫描入口改为 Step；关键词展示改为可删除 chip。
+- **章节识别**：Hero 显示规则同步状态；自定义规则列表改为 Step；配置文件操作行统一样式。
+- **EPUB 编辑器**：加载文件改为 Step；章节列表 + 编辑区使用响应式双列布局。
+
+---
+
+## 三、响应式与可访问性
+
+### 3.1 响应式布局
+
+新增布局类：
+
+- `.field-row`：输入框 + 按钮响应式行
+- `.settings-grid`：设置双列，小屏折叠
+- `.editor-grid`：EPUB 编辑器章节列表 + 编辑区双栏，小屏折叠
+- `.two-col-grid` / `.span-all`：查找替换、元数据表单布局
+- `.wide-page`：宽页面容器
+
+`@media (max-width: 860px)` 下：
+
+- body 改为可滚动
+- sidebar 改为横向滚动导航
+- Hero / 表单 / 编辑器双列布局折叠为单列
+- action bar 按钮自动拉伸，避免横向溢出
+
+### 3.2 可访问性
+
+- 导航项增加 `role="button"`、`tabindex="0"`、`aria-current`
+- 导航支持 Enter / Space 切换
+- `.btn`、`.inp`、`.nav-item`、`.quick-chip`、`.theme-toggle`、`.icon-btn`、`.status-link` 统一 `:focus-visible`
+- 主题切换、删除关键词、删除章节规则、查找、配置文件操作、底部状态栏操作补充 `aria-label`
+
+---
+
+## 四、CSS 组件化清理
+
+新增或强化的可复用类：
+
+| 类名 | 用途 |
+| ---- | ---- |
+| `.quick-chip` | 最近文件 / 最近目录 |
+| `.kw-chip` / `.kw-chip-hard` / `.kw-chip-soft` | 广告关键词标签 |
+| `.icon-btn` | `×` 等小图标按钮 |
+| `.config-row` / `.config-path` | 配置文件路径 + 操作按钮行 |
+| `.status-bar` / `.status-link` | 底部输出状态栏 |
+
+同时修复多处重复静态 class，例如：
+
+```html
+<!-- 修复前 -->
+<div class="card" class="mb3">
+
+<!-- 修复后 -->
+<div class="card mb3">
+```
+
+---
+
+## 五、EPUB 编辑器稳定性修复
+
+### 问题
+
+`/api/editor/build` 内部调用：
+
+```python
+chapter_title_align=req.chapter_title_align or "center"
+```
+
+但 `EditorBuildReq` 未声明 `chapter_title_align` 字段。某些编辑器重建 EPUB 请求会触发 `AttributeError`。
+
+### 修复
+
+`web_server.py` 中 `EditorBuildReq` 新增：
+
+```python
+# 章节标题对齐：'left'|'center'|'right'；需与 EpubReq 保持一致
+chapter_title_align: str = "center"
+```
+
+与主 EPUB 生成接口 `EpubReq` 保持一致。
+
+### 回归测试
+
+`tests/test_api.py` 新增：
+
+```python
+def test_editor_build_req_supports_chapter_title_align():
+    from web_server import EditorBuildReq
+
+    default_req = EditorBuildReq()
+    assert default_req.chapter_title_align == "center"
+
+    explicit_req = EditorBuildReq(chapter_title_align="right")
+    assert explicit_req.chapter_title_align == "right"
+```
+
+全量测试结果：
+
+```text
+23 passed, 1 warning in 0.47s
+```
+
+---
+
+## 六、文档与 Skill 同步
+
+### README
+
+`README.md` Web UI 版本更新为 `v3.0`，新增：
+
+- 现代化工具台 UI（v3.0）
+- 响应式布局优化
+- 可访问性增强
+- 编辑器重建稳定性修复
+
+### 设计文档
+
+`design-docs/txt-convert_DESIGN.md` 新增 `v3.0 稳定版深化`，记录：
+
+- App Shell / Hero / Step Card 结构
+- responsive class 约定
+- 可访问性策略
+- `EditorBuildReq.chapter_title_align` 稳定性修复
+
+### Standalone Skill
+
+`.claude/agents/novel-epub-typeset-standalone.md` 对齐 txt-convert v3.0 能力基线：
+
+- 行内广告截取 + 全角域名归一化
+- `split_plain` / `split_ruled` 章节标题样式
+- `chapter_title_align` 参数语义
+- 晋江 / 长佩 / 起点 / 微信读书 / 豆瓣 / Bing 六源封面思路
+- Step 6/7/8/9 流程编号修正
+
+---
+
 # v2.3 变更记录
 
 > **版本**: v2.3
