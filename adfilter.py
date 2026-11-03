@@ -238,6 +238,53 @@ class AdFilter:
         return result
 
     @classmethod
+    def scan_noise(cls, content: str) -> List[dict]:
+        """扫描行内乱码噪声（不修改），返回可清理行列表。
+
+        Returns:
+            [{
+                'line_num': int,       # 1-indexed
+                'original': str,       # 原始行文本
+                'cleaned': str,        # 清理后文本
+                'types': List[str],    # watermark / pua / control / html_tag / html_entity
+                'removed_count': int,  # 删除的字符数（长度差）
+            }]
+        """
+        lines = content.split('\n')
+        results = []
+        for i, line in enumerate(lines):
+            cleaned = cls._clean_noise(line)
+            if cleaned == line:
+                continue
+            types: List[str] = []
+            if cls._NOISE_RE.search(line):
+                has_zw = any(
+                    '\u200b' <= c <= '\u200f' or c in '\ufeff\u00ad\u00a0'
+                    for c in line
+                )
+                has_pua = any('\ue000' <= c <= '\uf8ff' for c in line)
+                has_ctrl = any(
+                    ord(c) <= 0x08 or 0x0e <= ord(c) <= 0x1f or ord(c) == 0x7f
+                    for c in line
+                )
+                if has_zw:  types.append('watermark')
+                if has_pua: types.append('pua')
+                if has_ctrl: types.append('control')
+            if cls._HTML_TAG_RE.search(line):
+                types.append('html_tag')
+            if '&' in line and _html.unescape(line) != line:
+                types.append('html_entity')
+            if not types:
+                types.append('noise')
+            results.append({
+                'line_num': i + 1,
+                'original': line,
+                'cleaned': cleaned,
+                'types': types,
+                'removed_count': len(line) - len(cleaned),
+            })
+        return results
+    @classmethod
     def filter_content(
         cls,
         content: str,

@@ -743,6 +743,61 @@ async def api_adfilter_delete(req: AdDeleteReq):
     return result
 
 
+class NoiseScanReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    path: str
+
+
+@app.post("/api/noise/scan")
+async def api_noise_scan(req: NoiseScanReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+
+    def _run():
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        return _AdFilter.scan_noise(content)
+
+    return {'results': await asyncio.to_thread(_run)}
+
+
+class NoiseApplyReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    path: str
+    line_nums: List[int]           # 1-indexed，来自 scan_noise 返回的 line_num
+    output_path: str = ""          # 留空则写到 {stem}_noisecleaned.txt
+
+
+@app.post("/api/noise/apply")
+async def api_noise_apply(req: NoiseApplyReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+    if not req.line_nums:
+        raise HTTPException(400, "line_nums 不能为空")
+
+    def _run():
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        lines = content.split('\n')
+        apply_set = {n - 1 for n in req.line_nums if 1 <= n <= len(lines)}
+        cleaned_count = 0
+        for i in apply_set:
+            c = _AdFilter._clean_noise(lines[i])
+            if c != lines[i]:
+                lines[i] = c
+                cleaned_count += 1
+        out = req.output_path or (
+            os.path.splitext(req.path)[0] + '_noisecleaned.txt'
+        )
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        return {"output_path": out, "cleaned": cleaned_count}
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
 # ── 章节识别规则 ───────────────────────────────────────────────
 from chapter_config import CHAPTER_RULES_FILE, DEFAULT_CHAPTER_PATTERNS as _DEFAULT_CHAPTER_PATTERNS
 

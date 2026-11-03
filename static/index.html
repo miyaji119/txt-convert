@@ -1418,7 +1418,10 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
     <!-- ── 广告规则 ──────────────────────────────────── -->
     <div x-show="page==='adfilter'" x-data="adfilterPanel()" class="page page-wrap"
-         x-init="$watch('$store.catalog.filePath', v => { if(v && !adScanPath) adScanPath=v })"
+         x-init="$watch('$store.catalog.filePath', v => {
+       if(v && !adScanPath) adScanPath=v
+       if(v && !noiseScanPath) noiseScanPath=v
+     })"
          style="max-width:760px;">
       <section class="mini-hero" aria-labelledby="adfilter-title">
         <div>
@@ -1528,6 +1531,115 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 x-text="basename(adDeleteOutput)"></span>
           <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
                   @click="openFile(adDeleteOutput)">在 Finder 中显示</button>
+        </div>
+      </section>
+
+      <!-- 乱码噪声扫描 -->
+      <section class="step-card" aria-labelledby="noise-scan-title">
+        <div class="step-head">
+          <div class="step-no">02</div>
+          <div>
+            <div id="noise-scan-title" class="step-title">扫描乱码噪声（预览，不修改）</div>
+            <div class="step-desc">检测隐形水印字符、HTML 标签残留等，可逐行选择是否清理。</div>
+          </div>
+        </div>
+        <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto; margin-bottom:10px;">
+          <input class="inp" type="text" x-model="noiseScanPath"
+                 placeholder="/Users/…/novel.txt"
+                 @keydown.enter="doNoiseScan()">
+          <button class="btn btn-ghost" @click="noiseScanBrowse()">浏览</button>
+          <button class="btn btn-amber" @click="doNoiseScan()" :disabled="noiseScanWorking||!noiseScanPath">
+            <span x-show="noiseScanWorking" class="spin"></span>
+            <span x-text="noiseScanWorking?'扫描中…':'扫描'"></span>
+          </button>
+        </div>
+        <div x-show="noiseScanDone && noiseScanResults.length===0"
+             style="font-size:12px; color:var(--muted); padding:4px 0;">
+          未发现乱码噪声行
+        </div>
+
+        <!-- 选择工具栏 -->
+        <div x-show="noiseScanResults.length>0"
+             style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+          <button class="btn btn-ghost" style="padding:3px 9px; font-size:11px;"
+                  @click="noiseSelectAll()">全选</button>
+          <button class="btn btn-ghost" style="padding:3px 9px; font-size:11px;"
+                  @click="noiseDeselectAll()">取消全选</button>
+          <span style="margin-left:auto; font-size:11px; color:var(--muted);">
+            已选 <span style="color:var(--text); font-weight:500;" x-text="noiseSelectedCount()"></span>
+            / <span x-text="noiseScanResults.length"></span> 行
+          </span>
+        </div>
+
+        <!-- 结果表格 -->
+        <div x-show="noiseScanResults.length>0" style="max-height:320px; overflow-y:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--dim);">
+                <th style="width:28px; padding:4px 6px;"></th>
+                <th style="text-align:left; padding:4px 6px; width:52px;">行号</th>
+                <th style="text-align:left; padding:4px 6px; width:90px;">类型</th>
+                <th style="text-align:left; padding:4px 6px;">清理后内容</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in noiseScanResults" :key="r.line_num">
+                <tr style="border-bottom:1px solid var(--border); cursor:pointer;"
+                    :style="noiseScanSelected[r.line_num] ? 'background:rgba(99,102,241,.05);' : ''"
+                    @click="noiseScanSelected[r.line_num] = !noiseScanSelected[r.line_num]">
+                  <td style="padding:4px 6px; text-align:center;">
+                    <input type="checkbox"
+                           :checked="!!noiseScanSelected[r.line_num]"
+                           @click.stop
+                           @change="noiseScanSelected[r.line_num] = $event.target.checked">
+                  </td>
+                  <td style="padding:4px 6px; color:var(--dim); font-variant-numeric:tabular-nums;"
+                      x-text="r.line_num"></td>
+                  <td style="padding:4px 6px;">
+                    <template x-for="t in r.types" :key="t">
+                      <span style="display:inline-block; padding:1px 5px; border-radius:3px;
+                                   font-size:10px; margin:1px 1px 0 0; white-space:nowrap;"
+                            :style="noiseTypeBadgeStyle(t)"
+                            x-text="noiseTypeLabel(t)"></span>
+                    </template>
+                  </td>
+                  <td style="padding:4px 6px; word-break:break-all;">
+                    <div style="color:var(--text);"
+                         x-text="r.cleaned.slice(0,80)+(r.cleaned.length>80?'…':'')"></div>
+                    <div style="color:var(--dim); font-size:10px; margin-top:2px;"
+                         x-text="noiseRemovedDesc(r)"></div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 底部操作 -->
+        <div x-show="noiseScanResults.length>0"
+             style="display:flex; align-items:center; justify-content:space-between;
+                    flex-wrap:wrap; gap:8px; margin-top:6px;">
+          <p style="font-size:11px; color:var(--dim);">
+            共 <span x-text="noiseScanResults.length"></span> 行含乱码噪声
+          </p>
+          <button class="btn btn-amber" style="padding:5px 14px; font-size:12px;"
+                  @click="doNoiseApply()"
+                  :disabled="noiseSelectedCount()===0 || noiseApplyWorking">
+            <span x-show="noiseApplyWorking" class="spin"></span>
+            <span x-text="noiseApplyWorking ? '清理中…' : '✨ 应用清理 (' + noiseSelectedCount() + ' 行)'"></span>
+          </button>
+        </div>
+
+        <!-- 清理成功后显示输出路径 -->
+        <div x-show="noiseApplyOutput"
+             style="margin-top:8px; padding:8px 12px;
+                    background:rgba(52,211,153,.05); border:1px solid rgba(52,211,153,.15);
+                    border-radius:6px; font-size:12px; display:flex; align-items:center; gap:8px;">
+          <span class="c-muted">输出：</span>
+          <span style="color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                x-text="basename(noiseApplyOutput)"></span>
+          <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
+                  @click="openFile(noiseApplyOutput)">在 Finder 中显示</button>
         </div>
       </section>
 
@@ -2206,6 +2318,8 @@ document.addEventListener('alpine:init', () => {
     adRulesFilePath:'',
     adScanPath:'', adScanWorking:false, adScanResults:[], adScanDone:false,
     adScanSelected:{}, adDeleteWorking:false, adDeleteOutput:'',
+    noiseScanPath:'', noiseScanWorking:false, noiseScanResults:[], noiseScanDone:false,
+    noiseScanSelected:{}, noiseApplyWorking:false, noiseApplyOutput:'',
 
     init() {
       this.loadAdRules()
@@ -2312,6 +2426,75 @@ document.addEventListener('alpine:init', () => {
         this.adScanSelected = {}
       } catch(e) { this.toast('删除失败', e.message, false) }
       this.adDeleteWorking = false
+    },
+
+    // ── 乱码噪声扫描 ──────────────────────────────────────────
+    async doNoiseScan() {
+      if (!this.noiseScanPath || this.noiseScanWorking) return
+      this.noiseScanWorking = true; this.noiseScanResults = []; this.noiseScanDone = false
+      try {
+        const r = await this.post('/api/noise/scan', {path: this.noiseScanPath})
+        this.noiseScanResults = r.results || []
+        this.noiseScanSelected = {}
+        for (const item of this.noiseScanResults) this.noiseScanSelected[item.line_num] = true
+        this.noiseScanDone = true
+      } catch(e) { this.toast('扫描失败', e.message, false) }
+      this.noiseScanWorking = false
+    },
+    async noiseScanBrowse() {
+      const r = await this.post('/api/browse', {type:'file'})
+      if (r.path) this.noiseScanPath = r.path
+    },
+    noiseSelectedCount() {
+      return Object.values(this.noiseScanSelected).filter(Boolean).length
+    },
+    noiseSelectAll() {
+      const s = {}
+      for (const r of this.noiseScanResults) s[r.line_num] = true
+      this.noiseScanSelected = s
+    },
+    noiseDeselectAll() { this.noiseScanSelected = {} },
+    noiseTypeLabel(t) {
+      return {watermark:'隐形水印', pua:'私用码位', control:'控制字符',
+              html_tag:'HTML标签', html_entity:'HTML实体', noise:'噪声'}[t] || t
+    },
+    noiseTypeBadgeStyle(t) {
+      const bg = {
+        watermark:'rgba(245,158,11,.15)', pua:'rgba(245,158,11,.1)',
+        control:'rgba(239,68,68,.15)', html_tag:'rgba(99,102,241,.12)',
+        html_entity:'rgba(99,102,241,.1)', noise:'rgba(107,114,128,.1)',
+      }[t] || 'rgba(107,114,128,.1)'
+      const fg = {
+        watermark:'#d97706', pua:'#b45309', control:'#dc2626',
+        html_tag:'#4f46e5', html_entity:'#4338ca', noise:'#6b7280',
+      }[t] || '#6b7280'
+      return `background:${bg}; color:${fg}; border:1px solid ${bg};`
+    },
+    noiseRemovedDesc(r) {
+      const p = []
+      if (r.removed_count > 0 &&
+          (r.types.includes('watermark') || r.types.includes('pua') || r.types.includes('control')))
+        p.push(`移除了 ${r.removed_count} 个不可见字符`)
+      if (r.types.includes('html_tag'))    p.push('HTML 标签已剥离')
+      if (r.types.includes('html_entity')) p.push('HTML 实体已解码')
+      return p.join('；')
+    },
+    async doNoiseApply() {
+      const nums = Object.entries(this.noiseScanSelected)
+        .filter(([,v]) => v).map(([k]) => parseInt(k))
+      if (!nums.length || this.noiseApplyWorking) return
+      this.noiseApplyWorking = true
+      try {
+        const res = await this.post('/api/noise/apply', {
+          path: this.noiseScanPath, line_nums: nums,
+        })
+        this.noiseApplyOutput = res.output_path || ''
+        this.toast('乱码已清理', `${res.cleaned} 行 → ${this.basename(res.output_path||'')}`)
+        const applySet = new Set(nums)
+        this.noiseScanResults = this.noiseScanResults.filter(r => !applySet.has(r.line_num))
+        this.noiseScanSelected = {}
+      } catch(e) { this.toast('清理失败', e.message, false) }
+      this.noiseApplyWorking = false
     },
   }))
 
