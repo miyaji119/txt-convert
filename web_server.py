@@ -1166,6 +1166,8 @@ class EditorBuildReq(BaseModel):
     fonts: dict = {}
     illustrations: list = []
     chapter_title_style: str = "classic"
+    # 章节标题对齐：'left'|'center'|'right'；需与 EpubReq 保持一致
+    chapter_title_align: str = "center"
     generate_cover_style: str = ""
     # 输出目录（优先级低于 output_path）
     output_dir: str = ""
