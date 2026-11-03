@@ -214,12 +214,27 @@ class AdFilter:
         """扫描广告内容（不删除），返回可疑行信息列表。
 
         Returns:
-            [{'line_num': int, 'score': float, 'text': str}]
+            [{
+                'line_num': int,
+                'score': float,
+                'text': str,          # 原始行（已 strip）
+                'mode': str,          # 'remove'（整行删除）| 'strip'（只截除广告片段）
+                'stripped': str|None, # mode='strip' 时截除后的保留内容
+            }]
         """
         lines = content.split('\n')
         n = len(lines)
         result = []
         already: set = set()
+
+        def _make_entry(i: int, line: str, sc: float) -> dict:
+            stripped = cls._strip_inline_ads(line)
+            if stripped != line and stripped.strip():
+                return {'line_num': i + 1, 'score': round(sc, 3), 'text': line.strip(),
+                        'mode': 'strip', 'stripped': stripped.strip()}
+            return {'line_num': i + 1, 'score': round(sc, 3), 'text': line.strip(),
+                    'mode': 'remove', 'stripped': None}
+
         for i, line in enumerate(lines):
             sc = cls._score(
                 line,
@@ -227,12 +242,12 @@ class AdFilter:
                 hard_kw=hard_kw, soft_kw=soft_kw,
             )
             if sc >= threshold:
-                result.append({'line_num': i + 1, 'score': round(sc, 3), 'text': line.strip()})
+                result.append(_make_entry(i, line, sc))
                 already.add(i)
         # 检测被换行拆开的推广网址
         for i in cls._split_url_indices(lines):
             if i not in already:
-                result.append({'line_num': i + 1, 'score': 0.85, 'text': lines[i].strip()})
+                result.append(_make_entry(i, lines[i], 0.85))
                 already.add(i)
         result.sort(key=lambda r: r['line_num'])
         return result

@@ -1531,11 +1531,26 @@ tr:hover td { background: rgba(255,255,255,.015); }
                   </td>
                   <td style="padding:4px 6px; color:var(--dim); font-variant-numeric:tabular-nums;"
                       x-text="r.line_num"></td>
-                  <td style="padding:4px 6px; font-variant-numeric:tabular-nums;"
-                      :style="r.score>=0.85?'color:#f87171':r.score>=0.7?'color:#fb923c':'color:var(--muted)'"
-                      x-text="r.score.toFixed(2)"></td>
-                  <td style="padding:4px 6px; color:var(--text); word-break:break-all;"
-                      x-text="r.text.slice(0,80)+(r.text.length>80?'…':'')"></td>
+                  <td style="padding:4px 6px; font-variant-numeric:tabular-nums; white-space:nowrap;">
+                    <span :style="r.score>=0.85?'color:#f87171':r.score>=0.7?'color:#fb923c':'color:var(--muted)'"
+                          x-text="r.score.toFixed(2)"></span>
+                    <span x-show="r.mode==='strip'"
+                          style="margin-left:4px; font-size:10px; padding:1px 4px;
+                                 background:rgba(52,211,153,.15); color:#34d399;
+                                 border-radius:3px; vertical-align:middle;">截取</span>
+                  </td>
+                  <td style="padding:4px 6px; color:var(--text); word-break:break-all;">
+                    <template x-if="r.mode==='strip'">
+                      <span>
+                        <span x-text="r.stripped.slice(0,60)+(r.stripped.length>60?'…':'')"></span>
+                        <span style="color:#f87171; text-decoration:line-through; margin-left:2px;"
+                              x-text="r.text.slice(r.stripped.length).slice(0,40)"></span>
+                      </span>
+                    </template>
+                    <template x-if="r.mode!=='strip'">
+                      <span x-text="r.text.slice(0,80)+(r.text.length>80?'…':'')"></span>
+                    </template>
+                  </td>
                 </tr>
               </template>
             </tbody>
@@ -1553,7 +1568,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
                   @click="doAdDelete()"
                   :disabled="adSelectedCount()===0 || adDeleteWorking">
             <span x-show="adDeleteWorking" class="spin"></span>
-            <span x-text="adDeleteWorking ? '删除中…' : '🗑 删除选中 (' + adSelectedCount() + ' 行)'"></span>
+            <span x-text="adDeleteWorking ? '处理中…' : '🗑 处理选中 (' + adSelectedCount() + ' 项)'"></span>
           </button>
         </div>
 
@@ -2448,20 +2463,29 @@ document.addEventListener('alpine:init', () => {
       this.adScanSelected = s
     },
     async doAdDelete() {
-      const nums = Object.entries(this.adScanSelected)
+      const selected = Object.entries(this.adScanSelected)
         .filter(([,v]) => v).map(([k]) => parseInt(k))
-      if (!nums.length || this.adDeleteWorking) return
+      if (!selected.length || this.adDeleteWorking) return
       this.adDeleteWorking = true
       try {
+        // 按 mode 分类：整行删除 vs 只截除广告片段
+        const resultMap = Object.fromEntries(this.adScanResults.map(r => [r.line_num, r]))
+        const line_nums = selected.filter(n => !resultMap[n] || resultMap[n].mode !== 'strip')
+        const strip_lines = selected
+          .filter(n => resultMap[n] && resultMap[n].mode === 'strip')
+          .map(n => ({line_num: n, content: resultMap[n].stripped || ''}))
         const res = await this.post('/api/adfilter/delete', {
-          path: this.adScanPath, line_nums: nums,
+          path: this.adScanPath, line_nums, strip_lines,
         })
         this.adDeleteOutput = res.output_path || ''
-        this.toast('广告已删除', `${res.removed} 行 → ${this.basename(res.output_path||'')}`)
-        const delSet = new Set(nums)
+        const parts = []
+        if (res.removed) parts.push(`删除 ${res.removed} 行`)
+        if (res.stripped) parts.push(`截取 ${res.stripped} 行`)
+        this.toast('广告已处理', `${parts.join('，')} → ${this.basename(res.output_path||'')}`)
+        const delSet = new Set(selected)
         this.adScanResults = this.adScanResults.filter(r => !delSet.has(r.line_num))
         this.adScanSelected = {}
-      } catch(e) { this.toast('删除失败', e.message, false) }
+      } catch(e) { this.toast('处理失败', e.message, false) }
       this.adDeleteWorking = false
     },
 

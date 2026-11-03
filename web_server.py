@@ -723,31 +723,46 @@ async def api_adfilter_scan(req: AdScanReq):
     return {'suspicious': await asyncio.to_thread(_run)}
 
 
+class StripLine(BaseModel):
+    line_num: int    # 1-indexed
+    content: str     # 截取广告后保留的内容（来自 scan 返回的 stripped 字段）
+
+
 class AdDeleteReq(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     path: str
-    line_nums: List[int]          # 1-indexed，来自 scan 接口返回的 line_num 字段
-    output_path: str = ""         # 留空则写到 {stem}_adcleaned.txt
+    line_nums: List[int] = []        # 整行删除，1-indexed
+    strip_lines: List[StripLine] = []  # 只截除广告片段，替换为 content
+    output_path: str = ""            # 留空则写到 {stem}_adcleaned.txt
 
 
 @app.post("/api/adfilter/delete")
 async def api_adfilter_delete(req: AdDeleteReq):
     if not os.path.isfile(req.path):
         raise HTTPException(404, "文件不存在")
-    if not req.line_nums:
-        raise HTTPException(400, "line_nums 不能为空")
+    if not req.line_nums and not req.strip_lines:
+        raise HTTPException(400, "line_nums 和 strip_lines 不能同时为空")
 
     def _run():
         content, enc = EncodingDetector.read_file_with_auto_encoding(req.path)
         lines = content.split('\n')
         remove_set = {n - 1 for n in req.line_nums if 1 <= n <= len(lines)}
-        cleaned = '\n'.join(l for i, l in enumerate(lines) if i not in remove_set)
+        strip_map = {sl.line_num - 1: sl.content
+                     for sl in req.strip_lines if 1 <= sl.line_num <= len(lines)}
+        result_lines = []
+        for i, line in enumerate(lines):
+            if i in remove_set:
+                continue
+            if i in strip_map:
+                result_lines.append(strip_map[i])
+            else:
+                result_lines.append(line)
         out = req.output_path or (
             os.path.splitext(req.path)[0] + '_adcleaned.txt'
         )
         with open(out, 'w', encoding='utf-8') as f:
-            f.write(cleaned)
-        return {"output_path": out, "removed": len(remove_set)}
+            f.write('\n'.join(result_lines))
+        return {"output_path": out, "removed": len(remove_set), "stripped": len(strip_map)}
 
     try:
         result = await asyncio.to_thread(_run)
