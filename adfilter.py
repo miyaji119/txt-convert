@@ -57,6 +57,17 @@ class AdFilter:
         re.I,
     )
 
+    # 疑似内插式水印短语：短汉字序列夹在功能词与续接词之间，打断句子流
+    # 示例："也不揄系正利。怎么回家" → "揄系正利。" 是水印
+    # 注：启发式检测，有一定误判率，需人工审查
+    _GARBLE_INNER_RE = re.compile(
+        r'(?<=[不没也都就才又还再却即])'         # 前一字为功能词
+        r'(?![不没也都就才又还再却即])'          # 短语首字不能再是功能词（避免吞入 不/也）
+        r'([一-鿿]{2,5})'                       # 嫌疑短语：2-5 个汉字
+        r'([。！？])'                            # 随附句末标点
+        r'(?=[怎也就才又还再却即][一-鿿])',      # 后接续接词（暗示句子未结束）
+    )
+
     # 不可见字符、私用区码位等乱码噪声（几乎零误判，直接截除）
     _NOISE_RE = re.compile(
         r'[\u00a0\u00ad\u115f\u1160\u17b4\u17b5'  # NBSP / soft-hyphen / Hangul/Khmer filler
@@ -323,6 +334,40 @@ class AdFilter:
                 'removed_count': len(line) - len(cleaned),
             })
         return results
+
+    @classmethod
+    def scan_garble(cls, content: str) -> List[dict]:
+        """扫描正文中疑似内插式水印短语（如"揄系正利。"打断正常句子流）。
+
+        使用启发式规则，结果需人工审查（存在一定误判率）：
+        - 前一字为功能词（不/没/也/都/就/才/又/还/再/却/即）
+        - 2-5 个汉字 + 句末标点
+        - 后面紧跟续接词（怎/也/就/才/又/还/再/却/即）
+
+        Returns:
+            [{
+                'line_num': int,   # 1-indexed
+                'original': str,   # 原始行全文
+                'phrase': str,     # 嫌疑短语（不含标点）
+                'punct': str,      # 随附句末标点
+                'offset': int,     # phrase 在行中的起始位置
+                'end': int,        # phrase+punct 结束位置（用于定点删除）
+            }]
+        """
+        lines = content.split('\n')
+        results = []
+        for i, line in enumerate(lines):
+            for m in cls._GARBLE_INNER_RE.finditer(line):
+                results.append({
+                    'line_num': i + 1,
+                    'original': line,
+                    'phrase': m.group(1),
+                    'punct': m.group(2),
+                    'offset': m.start(1),
+                    'end': m.end(2),
+                })
+        return results
+
     @classmethod
     def filter_content(
         cls,

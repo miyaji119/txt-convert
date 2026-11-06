@@ -1457,6 +1457,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
          x-init="$watch('$store.catalog.filePath', v => {
        if(v && !adScanPath) adScanPath=v
        if(v && !noiseScanPath) noiseScanPath=v
+       if(v && !garbleScanPath) garbleScanPath=v
      })"
          style="max-width:760px;">
       <section class="mini-hero" aria-labelledby="adfilter-title">
@@ -1691,6 +1692,99 @@ tr:hover td { background: rgba(255,255,255,.015); }
                 x-text="basename(noiseApplyOutput)"></span>
           <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
                   @click="openFile(noiseApplyOutput)">在 Finder 中显示</button>
+        </div>
+      </section>
+
+      <!-- 03 扫描语义乱码 -->
+      <section class="card mb3">
+        <div class="step-head">
+          <div class="step-no">03</div>
+          <div>
+            <div class="step-title">扫描语义乱码（预览，不修改）</div>
+            <div class="step-desc">检测插入句中的水印短语，如"也不<b>揄系正利。</b>怎么"。启发式规则，需人工审查。</div>
+          </div>
+        </div>
+        <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto; margin-bottom:10px;">
+          <input class="inp" type="text" x-model="garbleScanPath"
+                 placeholder="/Users/…/novel.txt"
+                 @keydown.enter="doGarbleScan()">
+          <button class="btn btn-ghost" @click="garbleScanBrowse()">浏览</button>
+          <button class="btn btn-amber" @click="doGarbleScan()" :disabled="garbleScanWorking||!garbleScanPath">
+            <span x-show="garbleScanWorking" class="spin"></span>
+            <span x-text="garbleScanWorking?'扫描中…':'扫描'"></span>
+          </button>
+        </div>
+        <div x-show="garbleScanDone && garbleResults.length===0"
+             style="font-size:12px; color:var(--muted); padding:4px 0;">
+          未发现疑似语义乱码</div>
+        <div x-show="garbleResults.length>0"
+             style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+          <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px;"
+                  @click="garbleSelectAll()">全选</button>
+          <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px;"
+                  @click="garbleDeselectAll()">全不选</button>
+          <span style="font-size:11px; color:var(--dim);">
+            已选 <span style="color:var(--text); font-weight:500;" x-text="garbleSelectedCount()"></span>
+            / <span x-text="garbleResults.length"></span> 处
+          </span>
+        </div>
+        <div x-show="garbleResults.length>0" style="max-height:320px; overflow-y:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--dim);">
+                <th style="width:28px; padding:4px 6px;"></th>
+                <th style="text-align:left; padding:4px 6px; width:52px;">行号</th>
+                <th style="text-align:left; padding:4px 6px;">上下文（嫌疑短语红色高亮）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(r, idx) in garbleResults" :key="idx">
+                <tr style="border-bottom:1px solid var(--border); cursor:pointer;"
+                    :style="garbleSelected[idx] ? 'background:rgba(239,68,68,.04);' : ''"
+                    @click="garbleSelected[idx] = !garbleSelected[idx]">
+                  <td style="padding:4px 6px; text-align:center;">
+                    <input type="checkbox"
+                           :checked="!!garbleSelected[idx]"
+                           @click.stop
+                           @change="garbleSelected[idx] = $event.target.checked">
+                  </td>
+                  <td style="padding:4px 6px; color:var(--dim); font-variant-numeric:tabular-nums;"
+                      x-text="r.line_num"></td>
+                  <td style="padding:4px 6px; word-break:break-all;">
+                    <span style="color:var(--dim);"
+                          x-text="garbleCtxBefore(r)"></span><span
+                          style="color:#f87171; font-weight:500;"
+                          x-text="'【' + r.phrase + r.punct + '】'"></span><span
+                          style="color:var(--dim);"
+                          x-text="garbleCtxAfter(r)"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <div x-show="garbleResults.length>0"
+             style="display:flex; align-items:center; justify-content:space-between;
+                    flex-wrap:wrap; gap:8px; margin-top:6px;">
+          <p style="font-size:11px; color:var(--dim);">
+            共 <span x-text="garbleResults.length"></span> 处疑似语义乱码（含误判，请人工审查）
+          </p>
+          <button class="btn btn-amber" style="padding:5px 14px; font-size:12px;"
+                  @click="doGarbleApply()"
+                  :disabled="garbleSelectedCount()===0 || garbleApplyWorking">
+            <span x-show="garbleApplyWorking" class="spin"></span>
+            <span x-text="garbleApplyWorking ? '清除中…' : '✂ 清除选中 (' + garbleSelectedCount() + ' 处)'"></span>
+          </button>
+        </div>
+        <div x-show="garbleApplyOutput"
+             style="margin-top:8px; padding:8px 12px;
+                    background:rgba(52,211,153,.05); border:1px solid rgba(52,211,153,.15);
+                    border-radius:6px; font-size:12px; display:flex; align-items:center; gap:8px;">
+          <span class="c-muted">输出：</span>
+          <span style="color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                x-text="basename(garbleApplyOutput)"></span>
+          <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px; flex-shrink:0;"
+                  @click="openFile(garbleApplyOutput)">在 Finder 中显示</button>
         </div>
       </section>
 
@@ -2372,11 +2466,16 @@ document.addEventListener('alpine:init', () => {
     adScanSelected:{}, adDeleteWorking:false, adDeleteOutput:'',
     noiseScanPath:'', noiseScanWorking:false, noiseScanResults:[], noiseScanDone:false,
     noiseScanSelected:{}, noiseApplyWorking:false, noiseApplyOutput:'',
+    garbleScanPath:'', garbleScanWorking:false, garbleResults:[], garbleScanDone:false,
+    garbleSelected:{}, garbleApplyWorking:false, garbleApplyOutput:'',
 
     init() {
       this.loadAdRules()
-      if (this.$store.catalog.filePath && !this.adScanPath) {
-        this.adScanPath = this.$store.catalog.filePath
+      const fp = this.$store.catalog.filePath
+      if (fp) {
+        if (!this.adScanPath) this.adScanPath = fp
+        if (!this.noiseScanPath) this.noiseScanPath = fp
+        if (!this.garbleScanPath) this.garbleScanPath = fp
       }
     },
 
@@ -2556,6 +2655,63 @@ document.addEventListener('alpine:init', () => {
         this.noiseScanSelected = {}
       } catch(e) { this.toast('清理失败', e.message, false) }
       this.noiseApplyWorking = false
+    },
+
+    // ── 语义乱码扫描 ──────────────────────────────────────────
+    async doGarbleScan() {
+      if (!this.garbleScanPath || this.garbleScanWorking) return
+      this.garbleScanWorking = true; this.garbleResults = []; this.garbleScanDone = false
+      try {
+        const r = await this.post('/api/garble/scan', {path: this.garbleScanPath})
+        this.garbleResults = r.results || []
+        this.garbleSelected = {}
+        this.garbleApplyOutput = ''
+        this.garbleScanDone = true
+      } catch(e) { this.toast('扫描失败', e.message, false) }
+      this.garbleScanWorking = false
+    },
+    async garbleScanBrowse() {
+      const r = await this.post('/api/browse', {})
+      if (r.path) this.garbleScanPath = r.path
+    },
+    garbleSelectedCount() {
+      return Object.values(this.garbleSelected).filter(Boolean).length
+    },
+    garbleSelectAll() {
+      const s = {}
+      this.garbleResults.forEach((_, i) => s[i] = true)
+      this.garbleSelected = s
+    },
+    garbleDeselectAll() { this.garbleSelected = {} },
+    garbleCtxBefore(r) {
+      const start = Math.max(0, r.offset - 12)
+      return (start > 0 ? '…' : '') + r.original.slice(start, r.offset)
+    },
+    garbleCtxAfter(r) {
+      const end = Math.min(r.original.length, r.end + 15)
+      return r.original.slice(r.end, end) + (end < r.original.length ? '…' : '')
+    },
+    async doGarbleApply() {
+      const indices = Object.entries(this.garbleSelected)
+        .filter(([,v]) => v).map(([k]) => parseInt(k))
+      if (!indices.length || this.garbleApplyWorking) return
+      this.garbleApplyWorking = true
+      try {
+        const items = indices.map(i => ({
+          line_num: this.garbleResults[i].line_num,
+          offset: this.garbleResults[i].offset,
+          end: this.garbleResults[i].end,
+        }))
+        const res = await this.post('/api/garble/apply', {
+          path: this.garbleScanPath, items,
+        })
+        this.garbleApplyOutput = res.output_path || ''
+        this.toast('语义乱码已清除', `${res.cleaned} 处 → ${this.basename(res.output_path||'')}`)
+        const removed = new Set(indices)
+        this.garbleResults = this.garbleResults.filter((_, i) => !removed.has(i))
+        this.garbleSelected = {}
+      } catch(e) { this.toast('清除失败', e.message, false) }
+      this.garbleApplyWorking = false
     },
   }))
 

@@ -826,6 +826,74 @@ async def api_noise_apply(req: NoiseApplyReq):
     return result
 
 
+class GarbleScanReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    path: str
+
+
+@app.post("/api/garble/scan")
+async def api_garble_scan(req: GarbleScanReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+
+    def _run():
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        return _AdFilter.scan_garble(content)
+
+    return {'results': await asyncio.to_thread(_run)}
+
+
+class GarbleItem(BaseModel):
+    line_num: int   # 1-indexed
+    offset: int     # 嫌疑短语在行中的起始位置
+    end: int        # 嫌疑短语+标点的结束位置
+
+
+class GarbleApplyReq(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    path: str
+    items: List[GarbleItem]
+    output_path: str = ""   # 留空则写到 {stem}_garblecleaned.txt
+
+
+@app.post("/api/garble/apply")
+async def api_garble_apply(req: GarbleApplyReq):
+    if not os.path.isfile(req.path):
+        raise HTTPException(404, "文件不存在")
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+
+    def _run():
+        from collections import defaultdict
+        content, _ = EncodingDetector.read_file_with_auto_encoding(req.path)
+        lines = content.split('\n')
+        by_line: dict = defaultdict(list)
+        for item in req.items:
+            if 1 <= item.line_num <= len(lines):
+                by_line[item.line_num - 1].append((item.offset, item.end))
+        cleaned_count = 0
+        for idx, spans in by_line.items():
+            line = lines[idx]
+            # 从后往前删除，避免偏移量失效
+            for start, end in sorted(spans, reverse=True):
+                if 0 <= start < end <= len(line):
+                    line = line[:start] + line[end:]
+                    cleaned_count += 1
+            lines[idx] = line
+        out = req.output_path or (
+            os.path.splitext(req.path)[0] + '_garblecleaned.txt'
+        )
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        return {"output_path": out, "cleaned": cleaned_count}
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
 # ── 章节识别规则 ───────────────────────────────────────────────
 from chapter_config import CHAPTER_RULES_FILE, DEFAULT_CHAPTER_PATTERNS as _DEFAULT_CHAPTER_PATTERNS
 
