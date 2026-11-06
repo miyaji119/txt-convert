@@ -5,8 +5,16 @@
 """
 
 import html as _html
+import logging
 import re
 from typing import List, Set, Tuple
+
+try:
+    import jieba as _jieba
+    _jieba.setLogLevel(logging.ERROR)   # 静默 jieba 加载日志
+    _JIEBA_OK = True
+except ImportError:
+    _JIEBA_OK = False
 
 
 class AdFilter:
@@ -358,10 +366,17 @@ class AdFilter:
         results = []
         for i, line in enumerate(lines):
             for m in cls._GARBLE_INNER_RE.finditer(line):
+                phrase = m.group(1)
+                # jieba 词典分词（HMM=False 只用词典，不做统计猜测）：
+                # 若短语切出任何多字词 → 是真实词组而非乱码，跳过
+                if _JIEBA_OK:
+                    segs = list(_jieba.cut(phrase, HMM=False))
+                    if any(len(s) > 1 for s in segs):
+                        continue
                 results.append({
                     'line_num': i + 1,
                     'original': line,
-                    'phrase': m.group(1),
+                    'phrase': phrase,
                     'punct': m.group(2),
                     'offset': m.start(1),
                     'end': m.end(2),
