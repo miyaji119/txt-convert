@@ -46,6 +46,17 @@ class AdFilter:
         re.I,
     )
 
+    # 行首社交账号推广前缀：{…}微博Cc栗~{ 正文... 等
+    # 账号名必须以 @/＠ 或 ASCII 字母/数字开头，避免误匹配正文中的"微博"
+    _LEADING_AD_FRAG_RE = re.compile(
+        r'^[^一-鿿]{0,15}'          # 行首装饰符（非汉字：{}~* 空格等）
+        r'(?:微博|微信|公众号|抖音|[Bb]站|bilibili)\s*'
+        r'(?:[@＠]\S{1,25}|[A-Za-z0-9]\S{0,24})'  # 账号名（必须以 @/英文/数字开头）
+        r'[^一-鿿\s]{0,8}'          # 尾部装饰符
+        r'\s+',
+        re.I,
+    )
+
     # 不可见字符、私用区码位等乱码噪声（几乎零误判，直接截除）
     _NOISE_RE = re.compile(
         r'[\u00a0\u00ad\u115f\u1160\u17b4\u17b5'  # NBSP / soft-hyphen / Hangul/Khmer filler
@@ -114,20 +125,31 @@ class AdFilter:
 
     @classmethod
     def _strip_inline_ads(cls, line: str) -> str:
-        """从正文行中截除末尾内嵌的广告片段（如"记住网址xxx.cc"）。
+        """从正文行中截除嵌入的广告片段。
 
-        只在广告片段之前有足够正文内容（≥6 个汉字）时才截取，
-        避免把纯广告行改成空行（纯广告行由普通评分逻辑整行删除）。
-        归一化后匹配，切点映射回原始行（长度 1:1 不变）。
+        支持两种模式：
+        - 行末追加型：正文…… 记住网址xxx.cc
+        - 行首前缀型：{}微博Cc栗~{ 正文……
+
+        只在截取后仍有足够正文内容（≥4 个汉字）时才截取。
         """
+        # 行末广告（归一化后匹配，切点 1:1 映射回原始行）
         norm = cls._fw_normalize(line)
         m = cls._INLINE_AD_FRAG_RE.search(norm)
-        if not m:
-            return line
-        cjk_before = sum(1 for ch in line[:m.start()] if '一' <= ch <= '鿿')
-        if cjk_before < 4:
-            return line
-        return line[:m.start()].rstrip('，, \t')
+        if m:
+            cjk_before = sum(1 for ch in line[:m.start()] if '一' <= ch <= '鿿')
+            if cjk_before >= 4:
+                return line[:m.start()].rstrip('，, \t')
+
+        # 行首广告前缀（社交账号推广，如 {}微博Cc栗~{ 正文……）
+        m_lead = cls._LEADING_AD_FRAG_RE.match(line)
+        if m_lead:
+            rest = line[m_lead.end():]
+            cjk_after = sum(1 for ch in rest if '一' <= ch <= '鿿')
+            if cjk_after >= 4:
+                return rest
+
+        return line
 
     @classmethod
     def _clean_noise(cls, line: str) -> str:
@@ -178,6 +200,8 @@ class AdFilter:
         if cls._PIRACY_RE.search(s_norm):
             score = max(score, 0.85)
         if cls._PLATFORM_RE.search(s_norm):
+            score = max(score, 0.82)
+        if cls._LEADING_AD_FRAG_RE.match(s):
             score = max(score, 0.82)
 
         # 高置信度正则（始终检查，不受 hard_kw 覆盖影响）
