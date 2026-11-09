@@ -1695,13 +1695,13 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
       </section>
 
-      <!-- 03 扫描语义乱码 -->
+      <!-- 03 语义乱码扫描（保守模式） -->
       <section class="card mb3">
         <div class="step-head">
           <div class="step-no">03</div>
           <div>
-            <div class="step-title">扫描语义乱码（预览，不修改）</div>
-            <div class="step-desc">检测插入句中的水印短语，如"也不<b>揄系正利。</b>怎么"。启发式规则，需人工审查。</div>
+            <div class="step-title">语义乱码扫描（保守模式）</div>
+            <div class="step-desc">旧版启发式误报较多，v3.1 默认停用；请优先使用上方“乱码噪声扫描”清理不可见字符、HTML 残留等高置信问题。</div>
           </div>
         </div>
         <div class="field-row" style="grid-template-columns:minmax(0,1fr) auto auto; margin-bottom:10px;">
@@ -1716,7 +1716,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
         </div>
         <div x-show="garbleScanDone && garbleResults.length===0"
              style="font-size:12px; color:var(--muted); padding:4px 0;">
-          未发现疑似语义乱码</div>
+          未发现疑似语义乱码（启发式规则默认停用，避免误报正常正文）
         <div x-show="garbleResults.length>0"
              style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
           <button class="btn btn-ghost" style="padding:2px 8px; font-size:11px;"
