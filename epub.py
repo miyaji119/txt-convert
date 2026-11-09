@@ -370,15 +370,20 @@ class EPUBGenerator:
 
     @staticmethod
     def _h1_tag(chapter_title: str, style_key: str, ch_num: int = 0) -> str:
+        chapter_title = (chapter_title or '').strip().strip('=＝—-~～＊*·•・ 	')
         style_def = EPUBGenerator.CHAPTER_TITLE_STYLES.get(style_key, {})
         if style_def.get('split'):
             m = EPUBGenerator._CHAP_NUM_RE.match(chapter_title)
             if m and m.group(2).strip():
+                title_text = m.group(2).strip().strip('=＝—-~～＊*·•・ 	')
                 # 标准编号 + 标题文字 → 正常拆分
-                inner = (
-                    f'<span class="ch-num">{m.group(1)}</span>'
-                    f'<span class="ch-title">{m.group(2).strip()}</span>'
-                )
+                if title_text:
+                    inner = (
+                        f'<span class="ch-num">{m.group(1)}</span>'
+                        f'<span class="ch-title">{title_text}</span>'
+                    )
+                else:
+                    inner = f'<span class="ch-title">{m.group(1)}</span>'
             elif not m and ch_num > 0:
                 # 无编号前缀 → 自动补"第N章"
                 inner = (

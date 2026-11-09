@@ -90,6 +90,9 @@ class ChapterAnalyzer:
             raw = chapter_match.group(num_grp)
             chapter_num = ChapterAnalyzer.normalize_chapter_num(raw) if normalize else int(raw)
             title_part = (chapter_match.group(title_grp) or "").strip() if title_grp else ""
+            # 等号/横线装饰章节（如 "==第38章 =="）可能把尾部 "=" 捕获为标题，
+            # 这类纯装饰符不应进入 EPUB 标题，否则会渲染成「第38章 =」。
+            title_part = title_part.strip('=＝—-~～＊*·•・ 	')
             # 标题以句号结尾，或以叹号/问号结尾且较长 → 疑似正文混入标题行
             if title_part and (
                 title_part[-1] == '。'
