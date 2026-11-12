@@ -1455,6 +1455,274 @@ async def get_edge_styles():
         return {"styles": []}
 
 
+# ── Editor Session 广告/噪声扫描与清洗 ────────────────────────
+# 输入源从磁盘文件改为当前 _SESSION 中的章节内容；
+# apply 端点直接写回 _SESSION，无需落盘。
+
+# ·· 广告扫描 ··················································
+@app.post("/api/editor/adfilter/scan")
+async def api_editor_adfilter_scan():
+    """扫描 Session 所有章节广告内容。
+
+    Returns: {"suspicious": [{chapter_i, chapter_title, line_num, score,
+                               text, mode, stripped}, ...]}
+    """
+    def _run():
+        rules = _get_ad_rules()
+        threshold = rules.get('threshold', 0.68)
+        hard_kw   = rules.get('hard_kw')
+        soft_kw   = rules.get('soft_kw')
+        results = []
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = list(_SESSION["chapters"])
+        for i, ch in enumerate(chapters):
+            hits = _AdFilter.scan_content(
+                ch.get("content", ""),
+                threshold=threshold,
+                hard_kw=hard_kw,
+                soft_kw=soft_kw,
+            )
+            for h in hits:
+                results.append({"chapter_i": i, "chapter_title": ch["title"], **h})
+        return results
+
+    try:
+        suspicious = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"suspicious": suspicious}
+
+
+# ·· 广告清洗应用 ··············································
+class EditorAdApplyItem(BaseModel):
+    chapter_i: int
+    line_num:  int   # 章节内 1-indexed
+    mode:      str   # "remove" 或 "strip"
+    stripped:  str = ""
+
+
+class EditorAdApplyReq(BaseModel):
+    items: List[EditorAdApplyItem]
+
+
+@app.post("/api/editor/adfilter/apply")
+async def api_editor_adfilter_apply(req: EditorAdApplyReq):
+    """将广告扫描结果应用到 Session。
+
+    Returns: {"removed": int, "stripped": int}
+    """
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+
+    def _run():
+        from collections import defaultdict
+        by_chapter: dict = defaultdict(list)
+        for it in req.items:
+            by_chapter[it.chapter_i].append((it.line_num - 1, it.mode, it.stripped))
+
+        removed = stripped = 0
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = _SESSION["chapters"]
+            for ci, ops in by_chapter.items():
+                if ci < 0 or ci >= len(chapters):
+                    continue
+                lines = chapters[ci].get("content", "").split("\n")
+                for line_idx, mode, strip_content in ops:
+                    if mode == "strip" and 0 <= line_idx < len(lines):
+                        lines[line_idx] = strip_content
+                        stripped += 1
+                remove_set = {
+                    line_idx for line_idx, mode, _ in ops
+                    if mode == "remove" and 0 <= line_idx < len(lines)
+                }
+                lines = [l for idx, l in enumerate(lines) if idx not in remove_set]
+                removed += len(remove_set)
+                chapters[ci]["content"] = "\n".join(lines)
+        return {"removed": removed, "stripped": stripped}
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
+# ·· 噪声扫描 ··················································
+@app.post("/api/editor/noise/scan")
+async def api_editor_noise_scan():
+    """扫描 Session 所有章节的不可见字符/HTML残留/私用区噪声。
+
+    Returns: {"results": [{chapter_i, chapter_title, line_num, original,
+                            cleaned, types, removed_count}, ...]}
+    """
+    def _run():
+        results = []
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = list(_SESSION["chapters"])
+        for i, ch in enumerate(chapters):
+            hits = _AdFilter.scan_noise(ch.get("content", ""))
+            for h in hits:
+                results.append({"chapter_i": i, "chapter_title": ch["title"], **h})
+        return results
+
+    try:
+        results = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"results": results}
+
+
+# ·· 噪声清洗应用 ··············································
+class EditorNoiseApplyItem(BaseModel):
+    chapter_i: int
+    line_num:  int   # 1-indexed
+
+
+class EditorNoiseApplyReq(BaseModel):
+    items: List[EditorNoiseApplyItem]
+
+
+@app.post("/api/editor/noise/apply")
+async def api_editor_noise_apply(req: EditorNoiseApplyReq):
+    """对指定行执行 _clean_noise，写回 Session。
+
+    Returns: {"cleaned": int}
+    """
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+
+    def _run():
+        from collections import defaultdict
+        by_chapter: dict = defaultdict(list)
+        for it in req.items:
+            by_chapter[it.chapter_i].append(it.line_num - 1)
+
+        cleaned = 0
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = _SESSION["chapters"]
+            for ci, idxs in by_chapter.items():
+                if ci < 0 or ci >= len(chapters):
+                    continue
+                lines = chapters[ci].get("content", "").split("\n")
+                for idx in idxs:
+                    if 0 <= idx < len(lines):
+                        c = _AdFilter._clean_noise(lines[idx])
+                        if c != lines[idx]:
+                            lines[idx] = c
+                            cleaned += 1
+                chapters[ci]["content"] = "\n".join(lines)
+        return {"cleaned": cleaned}
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
+# ·· 语义乱码扫描 ··············································
+@app.post("/api/editor/garble/scan")
+async def api_editor_garble_scan():
+    """扫描 Session 所有章节语义乱码（v3.1 保守模式，默认返回空列表）。
+
+    Returns: {"results": [{chapter_i, chapter_title, line_num, ...}, ...]}
+    """
+    def _run():
+        results = []
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = list(_SESSION["chapters"])
+        for i, ch in enumerate(chapters):
+            hits = _AdFilter.scan_garble(ch.get("content", ""))
+            for h in hits:
+                results.append({"chapter_i": i, "chapter_title": ch["title"], **h})
+        return results
+
+    try:
+        results = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"results": results}
+
+
+# ·· 语义乱码清洗应用 ··········································
+class EditorGarbleApplyItem(BaseModel):
+    chapter_i: int
+    line_num:  int   # 1-indexed
+    offset:    int
+    end:       int
+
+
+class EditorGarbleApplyReq(BaseModel):
+    items: List[EditorGarbleApplyItem]
+
+
+@app.post("/api/editor/garble/apply")
+async def api_editor_garble_apply(req: EditorGarbleApplyReq):
+    """按 offset/end 删除嫌疑语义乱码短语，写回 Session。
+
+    Returns: {"cleaned": int}
+    """
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+
+    def _run():
+        from collections import defaultdict
+        by_chapter: dict = defaultdict(list)
+        for it in req.items:
+            by_chapter[it.chapter_i].append((it.line_num - 1, it.offset, it.end))
+
+        cleaned = 0
+        with _SESSION_LOCK:
+            if not _SESSION["loaded"]:
+                raise RuntimeError("尚未加载书籍")
+            chapters = _SESSION["chapters"]
+            for ci, ops in by_chapter.items():
+                if ci < 0 or ci >= len(chapters):
+                    continue
+                lines = chapters[ci].get("content", "").split("\n")
+                by_line: dict = defaultdict(list)
+                for line_idx, offset, end_ in ops:
+                    by_line[line_idx].append((offset, end_))
+                for line_idx, spans in by_line.items():
+                    if 0 <= line_idx < len(lines):
+                        line = lines[line_idx]
+                        for start, end_ in sorted(spans, reverse=True):
+                            if 0 <= start < end_ <= len(line):
+                                line = line[:start] + line[end_:]
+                                cleaned += 1
+                        lines[line_idx] = line
+                chapters[ci]["content"] = "\n".join(lines)
+        return {"cleaned": cleaned}
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
 # ── 入口 ───────────────────────────────────────────────────────
 def main():
     url = "http://127.0.0.1:8765"
