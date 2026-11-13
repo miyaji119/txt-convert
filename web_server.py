@@ -329,8 +329,9 @@ async def api_epub(req: EpubReq):
 
     def _run():
         cur = req.path
+        analysis = {}
         if "_epub_ready" not in os.path.basename(cur):
-            out, _ = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False,
+            out, analysis = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False,
                                          filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
             if not out:
                 raise RuntimeError("转换失败")
@@ -357,14 +358,14 @@ async def api_epub(req: EpubReq):
             chapter_title_align=req.chapter_title_align or "center",
             generate_cover_style=req.generate_cover_style or "",
         )
-        return epub_path
+        return epub_path, analysis or {}
 
     try:
-        epub_path = await asyncio.to_thread(_run)
+        epub_path, analysis = await asyncio.to_thread(_run)
     except Exception as e:
         raise HTTPException(500, str(e))
     _save_profile(req.dict())
-    return {"epub_path": epub_path}
+    return {"epub_path": epub_path, "analysis": analysis}
 
 
 # ── 配置 Profile（跨书籍样式偏好持久化）────────────────────────

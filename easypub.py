@@ -268,7 +268,10 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
 
     content = ChapterAnalyzer.fix_broken_numbering(content)
 
+    ad_count = 0
     if filter_ads:
+        # 广告清洗必须发生在章节分析和排版之前：否则广告行可能被当成
+        # 章节标题或被合并进正文，最终只能先手动清洗再重新转换。
         _rules = ad_rules or {}
         content, ad_count = AdFilter.filter_content(
             content,
@@ -276,8 +279,7 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
             hard_kw=_rules.get('hard_kw'),
             soft_kw=_rules.get('soft_kw'),
         )
-        if ad_count:
-            print(f"   🧹 过滤广告行: {ad_count} 行")
+        print(f"   🧹 广告清洗: 移除 {ad_count} 行")
     content, wm_count, wm_list = NameCleaner.clean(content)
     if wm_count:
         preview = '、'.join(wm_list[:5])
@@ -297,6 +299,10 @@ def convert_for_easypub(input_file: str, output_file: str = None, book_title: st
 
     # 传递章节信息给optimize_for_epub，让它过滤误识别的章节
     optimized_content, analysis = EasyPubOptimizer.optimize_for_epub(content, book_title, author, chapter_structure)
+    # 将工作流预处理结果随分析结果返回，供 Web / GUI 明确告知用户。
+    analysis['ad_filter_enabled'] = filter_ads
+    analysis['ads_removed'] = ad_count
+    analysis['watermarks_removed'] = wm_count
 
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -372,7 +378,8 @@ def batch_convert_for_easypub(input_dir: str, output_dir: str = None, metadata_f
                 results.append({
                     'filename': filename, 'input': txt_file, 'output': output_path,
                     'size': os.path.getsize(output_path), 'chapters': analysis['total_chapters'],
-                    'lines': analysis['total_lines'], 'chars': analysis['total_chars']
+                    'lines': analysis['total_lines'], 'chars': analysis['total_chars'],
+                    'ads_removed': analysis.get('ads_removed', 0)
                 })
         except Exception as e:
             print(f"\n❌ 处理失败 {filename}: {str(e)}")

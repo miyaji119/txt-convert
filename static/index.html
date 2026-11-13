@@ -819,7 +819,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <div>
           <div class="hero-kicker">BOOK CRAFTER WORKFLOW</div>
           <h1 id="epub-page-title" class="hero-title">TXT → EPUB</h1>
-          <p class="hero-desc">清洗 TXT、校准章节、配置封面与排版，一键生成适合阅读器的精排 EPUB。</p>
+          <p class="hero-desc">自动广告清洗、校准章节、配置封面与排版，一键生成适合阅读器的精排 EPUB。</p>
         </div>
         <div class="hero-stats" aria-label="当前转换状态">
           <div class="hero-stat">
@@ -842,7 +842,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <div class="step-no">01</div>
           <div>
             <div id="epub-step-file" class="step-title">选择 TXT 文件</div>
-            <div class="step-desc">选择原始 TXT 后会自动识别书名、作者并分析章节目录。</div>
+            <div class="step-desc">生成时会先自动清洗广告，再识别书名、作者并校准章节；无需先手动导出清洗版 TXT。</div>
           </div>
         </div>
         <div class="field-row">
@@ -1286,7 +1286,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
           <label class="check-label">
             <input type="checkbox" x-model="filterAds"
                    style="width:16px; height:16px; accent-color:#d97706; cursor:pointer;">
-            过滤广告行
+            生成前自动清洗广告
           </label>
           <button class="btn btn-ghost" @click="doTxtOnly()"
                   :disabled="epubTxtOnlyWorking||epubWorking||!epubPath">
@@ -3215,7 +3215,7 @@ function app() {
 
     async _generateEpub(coverImage, coverUrl, genStyle='') {
       this.epubWorking=true; this.working=true
-      this.progress=8; this.progressErr=false; this.setStatus('生成 EPUB 中…')
+      this.progress=8; this.progressErr=false; this.setStatus(this.filterAds ? '广告清洗并生成 EPUB 中…' : '生成 EPUB 中…')
       try {
         const r = await this.post('/api/epub', {
           path:this.epubPath, title:this.epubTitle, author:this.epubAuthor,
@@ -3230,7 +3230,11 @@ function app() {
         })
         this.outputPath=r.epub_path; this.progress=100; this.setStatus('EPUB 生成完成')
         this.navItems.find(n=>n.id==='epub').badge='✓'; this.navItems.find(n=>n.id==='epub').badgeOk=true
-        this.toast('EPUB 生成完成', this.basename(r.epub_path||''))
+        const removed = r.analysis?.ads_removed
+        const detail = this.filterAds && typeof removed === 'number'
+          ? `${this.basename(r.epub_path||'')} · 已清洗 ${removed} 行广告`
+          : this.basename(r.epub_path||'')
+        this.toast('EPUB 生成完成', detail)
       } catch(e) {
         this.progressErr=true; this.progress=0; this.setStatus('生成失败', false)
         this.navItems.find(n=>n.id==='epub').badge='✗'; this.navItems.find(n=>n.id==='epub').badgeOk=false
@@ -3251,7 +3255,11 @@ function app() {
         this.epubPath = r.output_file
         this.outputPath = r.output_file
         this.progress=100; this.setStatus('转换完成')
-        this.toast('TXT 清洗完成', this.basename(r.output_file||''))
+        const removed = r.analysis?.ads_removed
+        const detail = this.filterAds && typeof removed === 'number'
+          ? `${this.basename(r.output_file||'')} · 已清洗 ${removed} 行广告`
+          : this.basename(r.output_file||'')
+        this.toast('TXT 清洗完成', detail)
         await this.onEpubFileChange()
         await this.loadRecent()
       } catch(e) {
