@@ -14,6 +14,8 @@ import json
 import queue
 import signal
 import asyncio
+import tempfile
+import shutil
 import warnings
 import threading
 import webbrowser
@@ -330,35 +332,51 @@ async def api_epub(req: EpubReq):
     def _run():
         cur = req.path
         analysis = {}
-        if "_epub_ready" not in os.path.basename(cur):
-            out, analysis = convert_for_easypub(cur, None, req.title, req.author, show_catalog=False,
-                                         filter_ads=req.filter_ads, ad_rules=_get_ad_rules())
-            if not out:
-                raise RuntimeError("转换失败")
-            cur = out
-        output_path = None
-        if req.output_dir:
-            os.makedirs(req.output_dir, exist_ok=True)
-            safe_title = re.sub(r'[<>:"/\\|?*]', '_', req.title) if req.title else os.path.splitext(os.path.basename(cur))[0]
-            output_path = os.path.join(req.output_dir, f"{safe_title}.epub")
-        epub_path = EPUBGenerator.txt_to_epub(
-            cur, output_path, req.title, req.author,
-            req.cover_image or None, req.auto_search_cover, req.cover_url or None,
-            req.description, req.publisher,
-            req.margin, req.line_height, req.text_indent, req.custom_css,
-            req.dialog_styles or None,
-            req.isbn, req.pubdate, req.language or "zh",
-            req.tags or None, req.drop_cap,
-            req.volume_map or None,
-            req.style_presets or None,
-            req.header_images or None,
-            req.fonts or None,
-            req.illustrations or None,
-            chapter_title_style=req.chapter_title_style or "classic",
-            chapter_title_align=req.chapter_title_align or "center",
-            generate_cover_style=req.generate_cover_style or "",
-        )
-        return epub_path, analysis or {}
+        # EPUB 生成只需要优化后的 TXT 作为中间输入。创建唯一的系统临时
+        # 目录，既不会在源 TXT 同目录留下 *_epub_ready.txt，也可一并清理
+        # 工作流下载/生成的封面等附属文件。
+        workflow_txt = None
+        workflow_dir = None
+        try:
+            if "_epub_ready" not in os.path.basename(cur):
+                workflow_dir = tempfile.mkdtemp(prefix="txt2epub-")
+                stem = os.path.splitext(os.path.basename(cur))[0]
+                workflow_txt = os.path.join(workflow_dir, f"{stem}_epub_ready.txt")
+                out, analysis = convert_for_easypub(
+                    cur, workflow_txt, req.title, req.author, show_catalog=False,
+                    filter_ads=req.filter_ads, ad_rules=_get_ad_rules(),
+                )
+                if not out:
+                    raise RuntimeError("转换失败")
+                cur = out
+            output_path = None
+            if req.output_dir:
+                os.makedirs(req.output_dir, exist_ok=True)
+                safe_title = re.sub(r'[<>:"/\\|?*]', '_', req.title) if req.title else os.path.splitext(os.path.basename(cur))[0]
+                output_path = os.path.join(req.output_dir, f"{safe_title}.epub")
+            epub_path = EPUBGenerator.txt_to_epub(
+                cur, output_path, req.title, req.author,
+                req.cover_image or None, req.auto_search_cover, req.cover_url or None,
+                req.description, req.publisher,
+                req.margin, req.line_height, req.text_indent, req.custom_css,
+                req.dialog_styles or None,
+                req.isbn, req.pubdate, req.language or "zh",
+                req.tags or None, req.drop_cap,
+                req.volume_map or None,
+                req.style_presets or None,
+                req.header_images or None,
+                req.fonts or None,
+                req.illustrations or None,
+                chapter_title_style=req.chapter_title_style or "classic",
+                chapter_title_align=req.chapter_title_align or "center",
+                generate_cover_style=req.generate_cover_style or "",
+            )
+            return epub_path, analysis or {}
+        finally:
+            # 仅删除本次创建的临时目录；用户自行选择的 TXT（包括旧的
+            # *_epub_ready.txt）不在该目录中，因而始终保留。
+            if workflow_dir and os.path.isdir(workflow_dir):
+                shutil.rmtree(workflow_dir, ignore_errors=True)
 
     try:
         epub_path, analysis = await asyncio.to_thread(_run)
