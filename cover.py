@@ -73,7 +73,7 @@ def _create_ssl_context() -> ssl.SSLContext:
 
 
 def _http_get(url: str, referer: str = '', timeout: int = 15,
-              encoding: str = None) -> Tuple[Optional[bytes], Optional[str]]:
+              encoding: str = None, quiet: bool = False) -> Tuple[Optional[bytes], Optional[str]]:
     """通用 HTTP GET，返回 (原始字节, 解码文本)
 
     若指定 encoding 则同时返回解码后的文本，否则文本为 None。
@@ -105,8 +105,42 @@ def _http_get(url: str, referer: str = '', timeout: int = 15,
                     text = raw.decode('utf-8', errors='ignore')
             return raw, text
     except Exception as e:
-        print(f"[DEBUG] HTTP GET 失败: {url} - {e}")
+        if not quiet:
+            print(f"[DEBUG] HTTP GET 失败: {url} - {e}")
         return None, None
+
+
+def get_cover_image(url: str, referer: str = '', timeout: int = 20) -> Optional[bytes]:
+    """下载候选封面，并兼容会拒绝首个请求的图片 CDN。
+
+    晋江部分旧封面存放在 huluxia CDN：其 HTTP 地址常返回 403，
+    而 HTTPS 或站点首页 Referer 可以正常取得同一资源。仅在首个
+    请求失败时重试，其他来源仍维持原始 URL 与 Referer。
+    """
+    attempts = [(url, referer)]
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.lower()
+    if host.endswith('huluxia.com'):
+        if parsed.scheme == 'http':
+            attempts.append((urllib.parse.urlunparse(parsed._replace(scheme='https')), referer))
+        attempts.extend([
+            (url, 'https://www.jjwxc.net/'),
+            (url, ''),
+        ])
+
+    seen = set()
+    for attempt_url, attempt_referer in attempts:
+        key = (attempt_url, attempt_referer)
+        if key in seen:
+            continue
+        seen.add(key)
+        raw, _ = _http_get(attempt_url, referer=attempt_referer,
+                           timeout=timeout, quiet=True)
+        if raw:
+            return raw
+
+    print(f"[DEBUG] 封面图片获取失败: {url}")
+    return None
 
 
 def _is_valid_image(file_path: str) -> bool:
@@ -199,7 +233,7 @@ def _is_book_cover_shape(file_path: str) -> bool:
 def _download_image(url: str, local_path: str,
                     referer: str = '', min_size: int = MIN_FILE_SIZE) -> bool:
     """下载图片到本地，带尺寸校验"""
-    raw, _ = _http_get(url, referer=referer, timeout=20)
+    raw = get_cover_image(url, referer=referer, timeout=20)
     if not raw:
         return False
     if len(raw) < min_size:

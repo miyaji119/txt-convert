@@ -1423,11 +1423,24 @@ async def preview_cover(req: PreviewCoverReq):
 async def cover_proxy(url: str, referer: str = ""):
     if not url or not url.startswith("http"):
         raise HTTPException(400, "无效的图片 URL")
-    from cover import _http_get
-    raw, _ = await asyncio.to_thread(_http_get, url, referer=referer, timeout=15)
+    from cover import get_cover_image
+    raw = await asyncio.to_thread(get_cover_image, url, referer=referer, timeout=20)
     if not raw:
         raise HTTPException(404, "图片获取失败")
-    ct = "image/png" if raw[:4] == b'\x89PNG' else "image/jpeg"
+    # 候选源既有 JPEG/PNG，也可能返回 WebP、GIF 或 AVIF。以前一律标为
+    # JPEG 会让部分浏览器无法在选择弹窗中解码预览。
+    if raw.startswith(b'\x89PNG\r\n\x1a\n'):
+        ct = "image/png"
+    elif raw.startswith((b'GIF87a', b'GIF89a')):
+        ct = "image/gif"
+    elif raw[:4] == b'RIFF' and raw[8:12] == b'WEBP':
+        ct = "image/webp"
+    elif raw[:3] == b'\xff\xd8\xff':
+        ct = "image/jpeg"
+    elif len(raw) >= 12 and raw[4:8] == b'ftyp' and raw[8:12] in (b'avif', b'avis'):
+        ct = "image/avif"
+    else:
+        ct = "application/octet-stream"
     return Response(content=raw, media_type=ct,
                     headers={"Cache-Control": "public, max-age=3600"})
 

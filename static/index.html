@@ -289,20 +289,52 @@ tr:hover td { background: rgba(255,255,255,.015); }
 /* ── Cover picker modal ─────────────────────────────────── */
 .cov-card {
   border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 10px;
+  border-radius: 8px;
+  padding: 7px;
   cursor: pointer;
   transition: border-color .15s, box-shadow .15s, background .15s;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .cov-card:hover { border-color: var(--bh); }
 .cov-sel {
   border-color: #d97706 !important;
   box-shadow: 0 0 0 2px rgba(217,119,6,.3);
   background: rgba(217,119,6,.05);
+}
+.cov-image-placeholder {
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  color:var(--dim);
+  font-size:11px;
+}
+.cov-image-spinner {
+  width:16px;
+  height:16px;
+  border:2px solid rgba(255,255,255,.12);
+  border-top-color:#d97706;
+  border-radius:50%;
+  animation:spin .65s linear infinite;
+}
+@media (max-width: 620px) {
+  .cover-picker-dialog { width:96vw !important; max-height:90vh !important; }
+  .cover-picker-grid { grid-template-columns:repeat(3, minmax(0, 1fr)) !important; gap:8px !important; }
+  .cov-card { padding:6px; }
+  .cover-picker-header { padding:14px 14px 10px !important; }
+  .cover-picker-body { padding:12px 14px !important; }
+  .cover-picker-footer { padding:10px 14px !important; gap:6px !important; flex-wrap:wrap; }
+}
+@media (max-width: 380px) {
+  .cover-picker-grid { grid-template-columns:repeat(2, minmax(0, 1fr)) !important; }
+  .cover-picker-footer .btn { padding:6px 10px !important; }
+  .cover-picker-footer .btn-amber { margin-left:auto !important; }
 }
 
 /* ── Spacing / layout utilities ─────────────────────── */
@@ -2333,12 +2365,12 @@ tr:hover td { background: rgba(255,255,255,.015); }
      style="position:fixed; inset:0; z-index:200; display:flex; align-items:center;
             justify-content:center; background:rgba(0,0,0,.75); backdrop-filter:blur(4px);"
      @keydown.escape.window="cancelCover()">
-  <div style="background:var(--card); border:1px solid var(--border); border-radius:14px;
-              width:min(700px,95vw); max-height:82vh; display:flex; flex-direction:column;
+  <div class="cover-picker-dialog" style="background:var(--card); border:1px solid var(--border); border-radius:14px;
+              width:min(940px,96vw); max-height:86vh; display:flex; flex-direction:column;
               box-shadow:0 24px 80px rgba(0,0,0,.7);">
 
     <!-- header -->
-    <div style="padding:18px 20px 14px; border-bottom:1px solid var(--border);
+    <div class="cover-picker-header" style="padding:18px 20px 14px; border-bottom:1px solid var(--border);
                 display:flex; align-items:flex-start; justify-content:space-between; flex-shrink:0;">
       <div>
         <h2 style="font-family:'Noto Serif SC',serif; font-size:15px; font-weight:500;
@@ -2358,7 +2390,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- body -->
-    <div style="flex:1; overflow-y:auto; padding:16px 20px;">
+    <div class="cover-picker-body" style="flex:1; overflow-y:auto; padding:16px 20px;">
       <!-- loading -->
       <div x-show="coverSearching"
            style="display:flex; flex-direction:column; align-items:center; padding:48px 0; gap:14px;">
@@ -2368,19 +2400,22 @@ tr:hover td { background: rgba(255,255,255,.015); }
         <span style="font-size:12px; color:var(--muted);">搜索中…</span>
       </div>
       <!-- grid -->
-      <div x-show="!coverSearching"
-           style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
-        <template x-for="(c,i) in coverCandidates" :key="i">
+      <div x-show="!coverSearching" class="cover-picker-grid"
+           style="display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px;">
+        <template x-for="(c,i) in coverCandidates" :key="c.image_url + '|' + (c.referer || '')">
           <div class="cov-card" :class="coverSelected===i?'cov-sel':''" @click="coverSelected=i">
             <!-- portrait image -->
             <div style="width:100%; aspect-ratio:3/4; border-radius:6px; overflow:hidden;
                         background:rgba(255,255,255,.04); position:relative; flex-shrink:0;">
               <img :src="`/api/cover-proxy?url=${encodeURIComponent(c.image_url)}&referer=${encodeURIComponent(c.referer||'')}`"
                    style="width:100%; height:100%; object-fit:cover; display:block;"
-                   loading="lazy"
-                   @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'">
-              <div style="display:none; position:absolute; inset:0; align-items:center;
-                          justify-content:center; color:var(--dim); font-size:11px;">无图</div>
+                   :alt="`${c.book_title || '候选'}封面`"
+                   @load="coverImageStates[i]='loaded'"
+                   @error="$event.target.style.display='none'; coverImageStates[i]='error'">
+              <div class="cov-image-placeholder">
+                <div x-show="coverImageStates[i] !== 'error'" class="cov-image-spinner"></div>
+                <span x-text="coverImageStates[i] === 'error' ? '图片加载失败' : '加载封面中…'"></span>
+              </div>
             </div>
             <!-- meta -->
             <div style="width:100%; text-align:center; min-width:0;">
@@ -2410,7 +2445,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
     </div>
 
     <!-- footer -->
-    <div style="padding:14px 20px; border-top:1px solid var(--border); flex-shrink:0;
+    <div class="cover-picker-footer" style="padding:14px 20px; border-top:1px solid var(--border); flex-shrink:0;
                 display:flex; align-items:center; gap:8px;">
       <button class="btn btn-ghost" @click="cancelCover()"
               style="font-size:12px; padding:6px 14px;">取消</button>
@@ -3012,7 +3047,7 @@ function app() {
     epubMargin:'0 4%', epubLineHeight:1.8, epubTextIndent:'2em', epubCustomCss:'',
     epubTitleStyle:'classic', epubTitleStyles:[],
     epubTitleAlign:'center',
-    coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null,
+    coverPickerVisible:false, coverCandidates:[], coverSearching:false, coverSelected:null, coverImageStates:{},
     epubCoverUrlConfirmed:'', epubCoverConfirmedTitle:'', epubCoverConfirmedSource:'',
     epubCoverSource: 'jjwxc',
     _epubResolve:null,
@@ -3201,7 +3236,7 @@ function app() {
     async doSearchCover() {
       const title = this.epubTitle || ''
       if (!title) { this.toast('需要书名', '请填写书名以搜索封面', false); return null }
-      this.coverCandidates = []; this.coverSelected = null
+      this.coverCandidates = []; this.coverSelected = null; this.coverImageStates = {}
       this.coverSearching = true; this.coverPickerVisible = true
       this.setStatus('搜索封面中…')
       try {
@@ -3209,8 +3244,9 @@ function app() {
                                   { title, author: this.epubAuthor || '',
                                     preferred_source: this.epubCoverSource || '' })
         this.coverCandidates = r.candidates || []
+        this.coverImageStates = Object.fromEntries(this.coverCandidates.map((_, i) => [i, 'loading']))
       } catch(e) {
-        this.coverCandidates = []
+        this.coverCandidates = []; this.coverImageStates = {}
       }
       this.coverSearching = false
       const choice = await new Promise(resolve => { this._epubResolve = resolve })
